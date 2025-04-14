@@ -7,18 +7,35 @@
 
 html {
     scroll-behavior: smooth;
-    --scroll-padding: 80px; /* Platz für Fixed Header, falls du einen hinzufügst */
+    --scroll-padding: 80px;
+}
+
+:root {
+    /* Farbpalette inspiriert vom Weltraum */
+    --color-background: #050a1a; /* Sehr dunkles Blau/Schwarz */
+    --color-background-light: #0d1120; /* Etwas heller für Karten etc. */
+    --color-text-primary: #e8e8f0; /* Helles Grau/Lavendel */
+    --color-text-secondary: #a0a8c0; /* Gedämpftes Blau/Grau */
+    --color-accent-primary: #a67cff; /* Leuchtendes Violett (Nebel) */
+    --color-accent-secondary: #70d6ff; /* Helles Cyan (Sterne/Jets) */
+    --color-accent-subtle: #3a506b; /* Dunkleres Blau für Linien/Tags */
+    --font-primary: 'Inter', sans-serif;
+    --font-secondary: 'Space Mono', monospace; /* Für technische/Akzent-Texte */
 }
 
 body {
-    font-family: 'Inter', sans-serif; /* Klare, moderne Sans-Serif */
-    background-color: #0B132B; /* Tiefes Dunkelblau */
-    color: #F8F8F8; /* Helles, fast weißes Grau für Haupttext */
+    font-family: var(--font-primary);
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
     line-height: 1.7;
     overflow-x: hidden;
-    /* Subtiler Hintergrund-Grid/Dot-Pattern */
-    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
-    background-size: 25px 25px;
+    /* Subtiler Nebel/Sternenstaub-Effekt + Dots */
+    background-image:
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0), /* Feinere Dots */
+        radial-gradient(ellipse at 30% 20%, rgba(112, 214, 255, 0.05) 0%, transparent 70%), /* Cyan Nebel */
+        radial-gradient(ellipse at 80% 70%, rgba(166, 124, 255, 0.07) 0%, transparent 70%); /* Violetter Nebel */
+    background-size: 20px 20px, 100% 100%, 100% 100%;
+    background-attachment: fixed; /* Hält Nebel fixiert */
 }
 
 /* Partikel Hintergrund Styling */
@@ -29,7 +46,7 @@ body {
     top: 0;
     left: 0;
     z-index: -1;
-    background-color: transparent; /* Nimmt Body-Hintergrund auf */
+    background-color: transparent;
 }
 
 /* Hero Section Styling */
@@ -43,372 +60,397 @@ body {
     padding: 40px 20px;
     position: relative;
     z-index: 1;
-    background: linear-gradient(rgba(11, 19, 43, 0.85), rgba(11, 19, 43, 0.98)); /* Dunkler Overlay */
+    background: linear-gradient(rgba(5, 10, 26, 0.8), rgba(5, 10, 26, 0.98)); /* Dunkler Overlay */
 }
 
 .hero-content h1 {
-    font-size: clamp(2.5rem, 6vw, 4rem); /* Responsive Schriftgröße */
+    font-size: clamp(2.8rem, 7vw, 4.5rem);
     font-weight: 700;
-    margin-bottom: 5px;
-    color: #FFFFFF; /* Klares Weiß für den Namen */
-    letter-spacing: 1px;
+    margin-bottom: 8px;
+    color: #FFFFFF;
+    letter-spacing: 1.5px;
+    text-shadow: 0 0 10px rgba(166, 124, 255, 0.3); /* Subtiles violettes Leuchten */
 }
 
 .hero-content .subtitle {
-    font-size: clamp(1.1rem, 3vw, 1.5rem);
+    font-size: clamp(1.1rem, 3vw, 1.6rem);
     font-weight: 400;
     margin-bottom: 15px;
-    color: #ADB5BD; /* Helleres Grau für den Untertitel */
-    font-family: 'Roboto Mono', monospace; /* Technische Schrift für Untertitel */
+    color: var(--color-text-secondary);
+    font-family: var(--font-secondary); /* Space Mono */
+    letter-spacing: 1px;
 }
 
 .hero-content .tagline {
-    font-size: clamp(1rem, 2.5vw, 1.2rem);
-    font-weight: 300;
-    color: #88CCEE; /* Heller Blauton als Akzent */
-    margin-bottom: 35px;
-    max-width: 600px; /* Verhindert zu breite Zeilen */
+    font-size: clamp(1.1rem, 2.8vw, 1.4rem);
+    font-weight: 400; /* Etwas dicker */
+    color: var(--color-accent-secondary); /* Helles Cyan */
+    margin-bottom: 40px;
+    max-width: 650px;
     margin-left: auto;
     margin-right: auto;
+    font-style: italic; /* Kursiv für den Spruch */
 }
 
 .cta-button {
-    display: inline-block;
-    background-color: #6FFFE9; /* Heller Cyan-Akzent */
-    color: #0B132B; /* Dunkler Text auf hellem Button */
-    padding: 12px 30px;
-    border-radius: 5px; /* Weniger rund, technischer */
+    display: inline-flex; /* Für Icon Ausrichtung */
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(45deg, var(--color-accent-primary), var(--color-accent-secondary)); /* Verlauf Violett -> Cyan */
+    color: #FFFFFF; /* Weißer Text auf Verlauf */
+    padding: 14px 35px;
+    border-radius: 50px; /* Wieder rundlicher, passt zum Thema */
     text-decoration: none;
     font-weight: 600;
-    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
-    box-shadow: 0 4px 10px rgba(111, 255, 233, 0.1);
-    border: 1px solid #6FFFE9;
+    transition: transform 0.3s ease, box-shadow 0.4s ease;
+    box-shadow: 0 5px 20px rgba(166, 124, 255, 0.25); /* Stärkerer Schatten */
+    border: none;
+    font-size: 1.05rem;
 }
 
 .cta-button:hover {
-    background-color: #5BC0BE; /* Etwas dunklerer Hover-Effekt */
-    border-color: #5BC0BE;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(91, 192, 190, 0.2);
+    transform: translateY(-3px) scale(1.03); /* Stärkerer Hover-Effekt */
+    box-shadow: 0 8px 25px rgba(112, 214, 255, 0.3);
 }
 
 /* Scroll Down Indikator */
 .scroll-down-indicator {
     position: absolute;
-    bottom: 30px;
+    bottom: 25px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 1.5rem;
-    color: rgba(248, 248, 248, 0.4);
-    animation: subtle-bounce 2.5s infinite ease-in-out;
+    font-size: 1.8rem;
+    color: rgba(232, 232, 240, 0.3); /* Farbe von --color-text-primary mit Alpha */
+    animation: pulse-fade 2.5s infinite ease-in-out;
 }
 
-@keyframes subtle-bounce {
-    0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.4; }
-    50% { transform: translateX(-50%) translateY(-8px); opacity: 0.8; }
+@keyframes pulse-fade {
+    0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.3; }
+    50% { transform: translateX(-50%) translateY(-10px); opacity: 0.7; }
 }
 
 /* Content Sections */
 .content-section {
-    padding: 100px 20px;
+    padding: 120px 20px;
     max-width: 1200px;
     margin: 0 auto;
     position: relative;
     z-index: 2;
-    background-color: transparent; /* Lässt Body-Hintergrund durchscheinen */
+    background-color: transparent;
 }
 
 .section-title {
     text-align: center;
-    font-size: 2.8rem;
-    margin-bottom: 60px;
+    font-size: clamp(2.2rem, 5vw, 3rem);
+    margin-bottom: 70px;
     font-weight: 700;
     position: relative;
-    padding-bottom: 15px;
-    color: #E0E0E0;
-    letter-spacing: 0.5px;
+    padding-bottom: 20px;
+    color: var(--color-text-primary);
+    letter-spacing: 1px;
+    font-family: var(--font-secondary); /* Space Mono für Titel */
 }
 
+/* Sternen-Linie unter dem Titel */
 .section-title::after {
     content: '';
     position: absolute;
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 60px;
-    height: 3px;
-    background-color: #6FFFE9; /* Akzentfarbe für die Linie */
-    border-radius: 2px;
+    width: 80px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--color-accent-secondary), var(--color-accent-primary)); /* Verlauf Cyan -> Violett */
+    border-radius: 1px;
+    box-shadow: 0 0 8px var(--color-accent-secondary); /* Leuchteffekt */
 }
 
 /* Über Mich Sektion Spezifisch */
 .about-content {
     display: grid;
-    grid-template-columns: 3fr 1fr; /* Mehr Platz für Text */
-    gap: 50px;
-    align-items: start; /* Vertikal oben ausrichten */
+    grid-template-columns: 2.5fr 1fr; /* Etwas angepasstes Verhältnis */
+    gap: 60px;
+    align-items: start;
 }
 
 .about-text p {
     margin-bottom: 25px;
-    color: #CED4DA; /* Etwas dunkler als Haupttext */
+    color: var(--color-text-secondary);
     font-size: 1.1rem;
 }
 
 .skills-preview {
-    margin-top: 20px;
+    margin-top: 30px;
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
 }
 
 .skills-preview span {
-    background-color: rgba(108, 117, 125, 0.2); /* Transparenter grauer Hintergrund */
-    color: #ADB5BD;
-    padding: 5px 12px;
-    border-radius: 20px;
+    background-color: rgba(58, 80, 107, 0.4); /* Hintergrund von --color-accent-subtle mit Alpha */
+    color: var(--color-text-secondary);
+    padding: 6px 15px;
+    border-radius: 4px; /* Etwas eckiger */
     font-size: 0.9rem;
-    font-family: 'Roboto Mono', monospace;
+    font-family: var(--font-secondary);
+    border: 1px solid rgba(58, 80, 107, 0.6);
 }
 
 .social-links {
-    text-align: right; /* Rechtsbündig im Grid */
+    text-align: right;
 }
 
 .social-links a {
-    display: block; /* Untereinander */
-    margin-bottom: 20px;
-    color: #ADB5BD;
-    font-size: 1.6rem; /* Etwas kleiner */
-    transition: color 0.3s ease, transform 0.3s ease;
+    display: block;
+    margin-bottom: 25px;
+    color: var(--color-text-secondary);
+    font-size: 1.8rem;
+    transition: color 0.3s ease, text-shadow 0.3s ease, transform 0.3s ease;
 }
 
 .social-links a:hover {
-    color: #6FFFE9; /* Akzentfarbe beim Hover */
-    transform: scale(1.1);
+    color: var(--color-accent-secondary); /* Cyan beim Hover */
+    text-shadow: 0 0 8px var(--color-accent-secondary);
+    transform: scale(1.15);
 }
 
 /* Projekt Grid */
 .projekt-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 40px;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 45px;
 }
 
 .projekt-karte {
-    background-color: #1C2541; /* Dunkelblau-Grau */
-    border-radius: 8px;
+    background-color: var(--color-background-light);
+    border-radius: 10px;
     overflow: hidden;
-    border: 1px solid rgba(91, 192, 190, 0.1); /* Sehr subtiler Rand */
-    transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    border: 1px solid rgba(58, 80, 107, 0.5); /* Dunkelblauer Rand */
+    transition: transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 .projekt-karte:hover {
-    transform: translateY(-5px);
-    border-color: rgba(111, 255, 233, 0.4); /* Rand wird sichtbarer */
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    transform: translateY(-8px) scale(1.01);
+    border-color: var(--color-accent-primary); /* Violetter Rand beim Hover */
+    box-shadow: 0 12px 35px rgba(166, 124, 255, 0.15);
 }
 
 .projekt-bild {
     width: 100%;
-    height: 220px;
+    height: 200px;
     object-fit: cover;
     display: block;
-    filter: grayscale(30%); /* Leicht entsättigt für technischen Look */
-    transition: filter 0.3s ease;
+    filter: saturate(0.8) brightness(0.9); /* Etwas weniger Sättigung, leicht dunkler */
+    transition: filter 0.4s ease;
 }
 
 .projekt-karte:hover .projekt-bild {
-    filter: grayscale(0%);
+    filter: saturate(1) brightness(1);
 }
 
 .projekt-bild-placeholder {
     width: 100%;
-    height: 220px;
-    background-color: #3A506B; /* Mittelblau */
+    height: 200px;
+    background: linear-gradient(45deg, var(--color-accent-subtle), #2a3f55); /* Dunkelblauer Verlauf */
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 1.8rem;
-    color: #0B132B;
-    font-weight: 600;
-    font-family: 'Roboto Mono', monospace;
+    font-size: 2rem;
+    color: rgba(232, 232, 240, 0.5); /* Farbe von --color-text-primary mit Alpha */
+    font-weight: 700;
+    font-family: var(--font-secondary); /* Space Mono */
+    letter-spacing: 2px;
 }
 
 .projekt-inhalt {
-    padding: 25px;
+    padding: 30px;
     display: flex;
     flex-direction: column;
-    flex-grow: 1; /* Nimmt restlichen Platz ein */
+    flex-grow: 1;
 }
 
 .projekt-inhalt h3 {
-    font-size: 1.4rem;
-    margin-bottom: 10px;
+    font-size: 1.5rem;
+    margin-bottom: 15px;
     color: #FFFFFF;
     font-weight: 600;
 }
 
 .projekt-inhalt p {
-    font-size: 0.95rem;
-    color: #CED4DA;
+    font-size: 1rem;
+    color: var(--color-text-secondary);
     flex-grow: 1;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 
 .projekt-tags {
-    margin-bottom: 20px;
+    margin-bottom: 25px;
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
 }
 
 .projekt-tags span {
-    background-color: rgba(136, 204, 238, 0.15); /* Transparenter Akzent */
-    color: #88CCEE; /* Heller Blauton */
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    font-family: 'Roboto Mono', monospace;
+    background-color: rgba(112, 214, 255, 0.1); /* Transparenter Cyan-Hintergrund */
+    color: var(--color-accent-secondary); /* Cyan Text */
+    padding: 5px 12px;
+    border-radius: 15px; /* Rundlicher */
+    font-size: 0.8rem;
+    font-family: var(--font-secondary); /* Space Mono */
+    text-transform: uppercase; /* Großbuchstaben */
+    letter-spacing: 0.5px;
 }
 
 .projekt-links {
-    margin-top: auto; /* Drückt Links nach unten */
+    margin-top: auto;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
 .projekt-button {
     background-color: transparent;
-    color: #6FFFE9;
-    border: 1px solid #6FFFE9;
-    padding: 8px 18px;
-    border-radius: 4px;
+    color: var(--color-accent-primary); /* Violett */
+    border: 1px solid var(--color-accent-primary);
+    padding: 8px 20px;
+    border-radius: 20px; /* Rundlicher */
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 500;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
+}
+
+.projekt-button i {
+    transition: transform 0.3s ease;
 }
 
 .projekt-button:hover {
-    background-color: rgba(111, 255, 233, 0.1); /* Leichter Hover-Hintergrund */
-    color: #88FFEE; /* Noch heller */
+    background-color: rgba(166, 124, 255, 0.1); /* Violetter Hover-Hintergrund */
+    color: #e8cfff; /* Helleres Violett */
+    box-shadow: 0 0 8px rgba(166, 124, 255, 0.3);
+}
+.projekt-button:hover i.fa-rocket,
+.projekt-button:hover i.fa-meteor {
+    transform: rotate(-45deg) scale(1.1); /* Icon-Drehung beim Hover */
 }
 
+
 .projekt-button.github {
-    color: #ADB5BD; /* Grau für GitHub */
-    border-color: #ADB5BD;
+    color: var(--color-text-secondary); /* Sekundärfarbe für GitHub */
+    border-color: var(--color-text-secondary);
 }
 
 .projekt-button.github:hover {
-    background-color: rgba(173, 181, 189, 0.1);
-    color: #CED4DA;
+    background-color: rgba(160, 168, 192, 0.1);
+    color: var(--color-text-primary);
+    box-shadow: 0 0 5px rgba(160, 168, 192, 0.2);
 }
 
 /* Footer */
 .footer {
     text-align: center;
-    padding: 40px 20px;
-    margin-top: 80px;
-    border-top: 1px solid rgba(58, 80, 107, 0.5); /* Subtile Trennlinie */
-    color: #ADB5BD;
-    font-size: 0.9rem;
+    padding: 50px 20px;
+    margin-top: 100px;
+    border-top: 1px solid rgba(58, 80, 107, 0.4); /* Dunkelblaue Linie */
+    color: var(--color-text-secondary);
+    font-size: 0.95rem;
     position: relative;
     z-index: 2;
-    background-color: #0B132B; /* Gleicher Hintergrund wie Body */
+    background-color: var(--color-background);
+    font-family: var(--font-secondary); /* Space Mono für Footer */
 }
 
-/* Fade-In Animationen (unverändert gut) */
+/* Fade-In Animationen */
 .fade-in {
     opacity: 0;
-    animation: fadeInAnimation 1s ease-out forwards;
-    animation-delay: 0.3s;
+    animation: fadeInAnimation 1.2s ease-out forwards;
+    animation-delay: 0.4s; /* Etwas längere Verzögerung */
 }
-
 .fade-in-scroll {
     opacity: 0;
-    transform: translateY(30px);
-    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    transform: translateY(40px);
+    transition: opacity 0.9s ease-out, transform 0.9s ease-out;
 }
-
 .fade-in-scroll.visible {
     opacity: 1;
     transform: translateY(0);
 }
-
 @keyframes fadeInAnimation {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-/* Easter Egg Styling (unverändert) */
+
+/* Easter Egg Styling */
 .easter-egg-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.95); /* Noch etwas dunkler */
+    background-color: rgba(5, 10, 26, 0.97); /* Hintergrundfarbe wie Body, fast opak */
     z-index: 1000;
     display: none;
     justify-content: center;
     align-items: center;
     text-align: center;
     flex-direction: column;
-    color: #39FF14; /* Helleres Matrix-Grün */
-    font-family: 'Roboto Mono', monospace; /* Monospace für den Effekt */
-    font-size: 1.5rem;
+    color: var(--color-accent-secondary); /* Cyan für Text */
+    font-family: var(--font-secondary); /* Space Mono */
+    font-size: 1.6rem;
     cursor: pointer;
     padding: 20px;
+    text-shadow: 0 0 10px rgba(112, 214, 255, 0.5); /* Cyan Leuchten */
 }
 .easter-egg-overlay p {
-    margin-bottom: 20px;
-    text-shadow: 0 0 5px #39FF14;
-    animation: matrix-flicker 0.15s infinite alternate;
+    margin-bottom: 25px;
+    line-height: 1.4;
+    animation: text-scan 0.2s infinite alternate; /* Neuer Effekt */
 }
 .easter-egg-overlay span {
     font-size: 1rem;
-    color: #2AAA0E; /* Dunkleres Grün */
-    margin-top: 10px;
+    color: var(--color-text-secondary); /* Gedämpftere Farbe */
+    margin-top: 15px;
 }
-@keyframes matrix-flicker {
-  0% { opacity: 0.7; }
-  100% { opacity: 1; }
+@keyframes text-scan { /* Simuliert einen Scan-Effekt */
+  0% { opacity: 0.8; letter-spacing: 1px; }
+  100% { opacity: 1; letter-spacing: 1.5px; }
 }
+
 
 /* Responsiveness Anpassungen */
 @media (max-width: 992px) {
     .about-content {
-        grid-template-columns: 1fr; /* Spalten untereinander */
-        gap: 30px;
+        grid-template-columns: 1fr;
+        gap: 40px;
     }
     .social-links {
-        text-align: center; /* Links zentrieren */
-        margin-top: 20px;
+        text-align: center;
+        margin-top: 30px;
     }
     .social-links a {
-        display: inline-block; /* Nebeneinander */
-        margin: 0 15px;
+        display: inline-block;
+        margin: 0 20px;
     }
 }
 
 @media (max-width: 768px) {
-    .section-title {
-        font-size: 2.2rem;
-        margin-bottom: 40px;
-    }
     .content-section {
-        padding: 80px 15px;
+        padding: 100px 15px;
     }
-    .projekt-karte {
-        /* Keine Änderung nötig, da Grid bereits responsive ist */
+    .section-title {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        margin-bottom: 50px;
+    }
+    .projekt-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Kleinere Mindestbreite */
+        gap: 30px;
     }
     .about-text p {
         font-size: 1rem;
@@ -417,22 +459,27 @@ body {
 
 @media (max-width: 480px) {
     body {
-         background-size: 30px 30px; /* Größeres Grid auf kleinen Screens */
+        background-size: 30px 30px, 150% 150%, 150% 150%; /* Skalierung des Nebels anpassen */
     }
     .hero-content h1 {
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
     }
     .hero-content .tagline {
-        font-size: 0.9rem;
+        font-size: 1rem;
     }
     .cta-button {
-        padding: 10px 25px;
+        padding: 12px 30px;
+        font-size: 1rem;
     }
     .projekt-tags span {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
+        padding: 4px 10px;
     }
     .projekt-button {
-        font-size: 0.85rem;
-        padding: 7px 15px;
+        font-size: 0.8rem;
+        padding: 7px 16px;
     }
+    .easter-egg-overlay {
+        font-size: 1.3rem;
     }
+}
