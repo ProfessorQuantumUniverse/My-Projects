@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dein Name - Portfolio</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts für einen modernen Look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome für Icons (optional, aber schick) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- Partikel Hintergrund Container -->
+    <div id="particles-js"></div>
+
+    <!-- Header / Hero Section -->
+    <header class="hero">
+        <div class="hero-content fade-in">
+            <h1>Hallo, ich bin [Dein Name]!</h1>
+            <p class="subtitle">Kreativer Entwickler | Web Enthusiast | Problemlöser</p>
+            <a href="#projekte" class="cta-button">Meine Projekte ansehen</a>
+        </div>
+        <div class="scroll-down-indicator">
+            <i class="fas fa-chevron-down"></i>
+        </div>
+    </header>
+
+    <!-- Über Mich Sektion -->
+    <section id="ueber-mich" class="content-section">
+        <h2 class="section-title">Über Mich</h2>
+        <p class="fade-in-scroll">
+            Willkommen auf meiner Seite! Ich bin [Dein Name] und begeistere mich für [Deine Hauptinteressen, z.B. Webentwicklung, Design, Datenanalyse].
+            Ich liebe es, Ideen in funktionierende und ästhetisch ansprechende Projekte umzusetzen. Hier findest du eine Auswahl meiner Arbeiten.
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+        </p>
+        <div class="social-links fade-in-scroll">
+            <a href="https://github.com/DEIN_GITHUB_USERNAME" target="_blank" title="GitHub"><i class="fab fa-github"></i></a>
+            <a href="https://linkedin.com/in/DEIN_LINKEDIN_PROFIL" target="_blank" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
+            <a href="mailto:deine.email@example.com" title="E-Mail"><i class="fas fa-envelope"></i></a>
+            <!-- Füge hier weitere Links hinzu -->
+        </div>
+    </section>
+
+    <!-- Projekte Sektion -->
+    <section id="projekte" class="content-section">
+        <h2 class="section-title">Meine Projekte</h2>
+        <div class="projekt-grid">
+
+            <!-- Projekt 1 (Beispiel) -->
+            <div class="projekt-karte fade-in-scroll">
+                <img src="placeholder-projekt1.jpg" alt="Vorschaubild Projekt 1" class="projekt-bild"> <!-- Ersetze dies mit einem echten Bild -->
+                <h3>Projekt Titel 1</h3>
+                <p>Eine kurze, knackige Beschreibung deines ersten Projekts. Was macht es? Welche Technologien wurden verwendet?</p>
+                <div class="projekt-links">
+                    <a href="LINK_ZUM_LIVE_PROJEKT_1" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
+                    <a href="LINK_ZUM_GITHUB_REPO_1" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                </div>
+            </div>
+
+            <!-- Projekt 2 (Beispiel) -->
+            <div class="projekt-karte fade-in-scroll">
+                 <div class="projekt-bild-placeholder">Projekt 2</div> <!-- Alternativ, wenn du kein Bild hast -->
+                <h3>Projekt Titel 2</h3>
+                <p>Beschreibung für das zweite Projekt. Vielleicht etwas ganz anderes? Zeig deine Vielseitigkeit!</p>
+                 <div class="projekt-links">
+                    <!-- <a href="#" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a> -->
+                    <a href="LINK_ZUM_GITHUB_REPO_2" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                </div>
+            </div>
+
+            <!-- Projekt 3 (Beispiel) -->
+            <div class="projekt-karte fade-in-scroll">
+                <img src="placeholder-projekt3.jpg" alt="Vorschaubild Projekt 3" class="projekt-bild"> <!-- Ersetze dies mit einem echten Bild -->
+                <h3>Projekt Titel 3</h3>
+                <p>Noch ein cooles Projekt. Hier könntest du z.B. auf eine besondere Herausforderung oder ein cooles Feature eingehen.</p>
+                 <div class="projekt-links">
+                    <a href="LINK_ZUM_LIVE_PROJEKT_3" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
+                    <a href="LINK_ZUM_GITHUB_REPO_3" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                </div>
+            </div>
+
+             <!-- Füge hier weitere Projekt-Karten hinzu -->
+             <!-- Kopiere einfach eine <div class="projekt-karte">...</div> Sektion und passe sie an -->
+
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; <span id="current-year"></span> [Dein Name]. Alle Rechte vorbehalten.</p>
+        <!-- Kleiner Hinweis für das Easter Egg im Code ;) -->
+    </footer>
+
+    <!-- JavaScript Libraries (Particles.js) -->
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <!-- Dein eigenes JavaScript -->
+    <script src="script.js"></script>
+</body>
+</html>
