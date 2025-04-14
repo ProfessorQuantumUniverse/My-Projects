@@ -6,15 +6,19 @@
 }
 
 html {
-    scroll-behavior: smooth; /* Für sanftes Scrollen bei internen Links */
+    scroll-behavior: smooth;
+    --scroll-padding: 80px; /* Platz für Fixed Header, falls du einen hinzufügst */
 }
 
 body {
-    font-family: 'Poppins', sans-serif;
-    background-color: #121212; /* Dunkler Hintergrund */
-    color: #e0e0e0; /* Heller Text */
-    line-height: 1.6;
-    overflow-x: hidden; /* Verhindert horizontales Scrollen */
+    font-family: 'Inter', sans-serif; /* Klare, moderne Sans-Serif */
+    background-color: #0B132B; /* Tiefes Dunkelblau */
+    color: #F8F8F8; /* Helles, fast weißes Grau für Haupttext */
+    line-height: 1.7;
+    overflow-x: hidden;
+    /* Subtiler Hintergrund-Grid/Dot-Pattern */
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+    background-size: 25px 25px;
 }
 
 /* Partikel Hintergrund Styling */
@@ -24,58 +28,68 @@ body {
     height: 100%;
     top: 0;
     left: 0;
-    z-index: -1; /* Hinter den Inhalt legen */
-    background-color: #1a1a1a;
+    z-index: -1;
+    background-color: transparent; /* Nimmt Body-Hintergrund auf */
 }
 
 /* Hero Section Styling */
 .hero {
-    min-height: 100vh; /* Volle Bildschirmhöhe */
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    padding: 20px;
-    position: relative; /* Für den Scroll-Indikator */
-    background: linear-gradient(rgba(18, 18, 18, 0.8), rgba(18, 18, 18, 0.95)); /* leichter Overlay über Partikel */
-    z-index: 1; /* Über Partikel, unter Inhalt */
+    padding: 40px 20px;
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(rgba(11, 19, 43, 0.85), rgba(11, 19, 43, 0.98)); /* Dunkler Overlay */
 }
 
 .hero-content h1 {
-    font-size: 3rem; /* Responsive Größe */
+    font-size: clamp(2.5rem, 6vw, 4rem); /* Responsive Schriftgröße */
     font-weight: 700;
-    margin-bottom: 10px;
-    background: linear-gradient(90deg, #00dbde, #fc00ff); /* Cooler Farbverlauf */
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text; /* Standard-Syntax */
-    text-fill-color: transparent; /* Standard-Syntax */
-    animation: text-glow 1.5s ease-in-out infinite alternate; /* Leuchteffekt */
+    margin-bottom: 5px;
+    color: #FFFFFF; /* Klares Weiß für den Namen */
+    letter-spacing: 1px;
 }
 
 .hero-content .subtitle {
-    font-size: 1.4rem;
+    font-size: clamp(1.1rem, 3vw, 1.5rem);
+    font-weight: 400;
+    margin-bottom: 15px;
+    color: #ADB5BD; /* Helleres Grau für den Untertitel */
+    font-family: 'Roboto Mono', monospace; /* Technische Schrift für Untertitel */
+}
+
+.hero-content .tagline {
+    font-size: clamp(1rem, 2.5vw, 1.2rem);
     font-weight: 300;
-    margin-bottom: 30px;
-    color: #bdbdbd;
+    color: #88CCEE; /* Heller Blauton als Akzent */
+    margin-bottom: 35px;
+    max-width: 600px; /* Verhindert zu breite Zeilen */
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .cta-button {
     display: inline-block;
-    background: linear-gradient(90deg, #00dbde, #fc00ff);
-    color: #fff;
-    padding: 12px 25px;
-    border-radius: 50px; /* Abgerundete Ecken */
+    background-color: #6FFFE9; /* Heller Cyan-Akzent */
+    color: #0B132B; /* Dunkler Text auf hellem Button */
+    padding: 12px 30px;
+    border-radius: 5px; /* Weniger rund, technischer */
     text-decoration: none;
     font-weight: 600;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    box-shadow: 0 5px 15px rgba(0, 219, 222, 0.3);
+    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 10px rgba(111, 255, 233, 0.1);
+    border: 1px solid #6FFFE9;
 }
 
 .cta-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgba(252, 0, 255, 0.4);
+    background-color: #5BC0BE; /* Etwas dunklerer Hover-Effekt */
+    border-color: #5BC0BE;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(91, 192, 190, 0.2);
 }
 
 /* Scroll Down Indikator */
@@ -85,188 +99,242 @@ body {
     left: 50%;
     transform: translateX(-50%);
     font-size: 1.5rem;
-    color: rgba(224, 224, 224, 0.5);
-    animation: bounce 2s infinite;
+    color: rgba(248, 248, 248, 0.4);
+    animation: subtle-bounce 2.5s infinite ease-in-out;
 }
 
-@keyframes bounce {
-    0%, 20%, 50%, 80%, 100% {
-        transform: translateX(-50%) translateY(0);
-    }
-    40% {
-        transform: translateX(-50%) translateY(-10px);
-    }
-    60% {
-        transform: translateX(-50%) translateY(-5px);
-    }
+@keyframes subtle-bounce {
+    0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.4; }
+    50% { transform: translateX(-50%) translateY(-8px); opacity: 0.8; }
 }
 
 /* Content Sections */
 .content-section {
-    padding: 80px 20px;
-    max-width: 1100px;
-    margin: 0 auto; /* Zentrieren */
-    position: relative; /* Wichtig für z-index über Partikel */
+    padding: 100px 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
     z-index: 2;
-    background-color: #121212; /* Stellt sicher, dass der Inhalt deckt */
+    background-color: transparent; /* Lässt Body-Hintergrund durchscheinen */
 }
 
 .section-title {
     text-align: center;
-    font-size: 2.5rem;
-    margin-bottom: 50px;
-    font-weight: 600;
+    font-size: 2.8rem;
+    margin-bottom: 60px;
+    font-weight: 700;
     position: relative;
-    padding-bottom: 10px;
+    padding-bottom: 15px;
+    color: #E0E0E0;
+    letter-spacing: 0.5px;
 }
 
-/* Linie unter dem Titel */
 .section-title::after {
     content: '';
     position: absolute;
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 80px;
-    height: 4px;
-    background: linear-gradient(90deg, #00dbde, #fc00ff);
+    width: 60px;
+    height: 3px;
+    background-color: #6FFFE9; /* Akzentfarbe für die Linie */
     border-radius: 2px;
 }
 
-/* Social Links Styling */
+/* Über Mich Sektion Spezifisch */
+.about-content {
+    display: grid;
+    grid-template-columns: 3fr 1fr; /* Mehr Platz für Text */
+    gap: 50px;
+    align-items: start; /* Vertikal oben ausrichten */
+}
+
+.about-text p {
+    margin-bottom: 25px;
+    color: #CED4DA; /* Etwas dunkler als Haupttext */
+    font-size: 1.1rem;
+}
+
+.skills-preview {
+    margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.skills-preview span {
+    background-color: rgba(108, 117, 125, 0.2); /* Transparenter grauer Hintergrund */
+    color: #ADB5BD;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-family: 'Roboto Mono', monospace;
+}
+
 .social-links {
-    text-align: center;
-    margin-top: 30px;
+    text-align: right; /* Rechtsbündig im Grid */
 }
 
 .social-links a {
-    color: #bdbdbd;
-    font-size: 1.8rem;
-    margin: 0 15px;
+    display: block; /* Untereinander */
+    margin-bottom: 20px;
+    color: #ADB5BD;
+    font-size: 1.6rem; /* Etwas kleiner */
     transition: color 0.3s ease, transform 0.3s ease;
 }
 
 .social-links a:hover {
-    color: #00dbde; /* Akzentfarbe beim Hover */
-    transform: scale(1.2);
+    color: #6FFFE9; /* Akzentfarbe beim Hover */
+    transform: scale(1.1);
 }
-
 
 /* Projekt Grid */
 .projekt-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Responsive Grid */
-    gap: 30px; /* Abstand zwischen Karten */
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 40px;
 }
 
 .projekt-karte {
-    background-color: #1e1e1e; /* Etwas helleres Dunkelgrau */
-    border-radius: 15px; /* Stärkere Abrundung */
-    overflow: hidden; /* Verhindert, dass Bild überläuft */
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    transition: transform 0.3s ease, box-shadow 0.4s ease;
+    background-color: #1C2541; /* Dunkelblau-Grau */
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(91, 192, 190, 0.1); /* Sehr subtiler Rand */
+    transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
     display: flex;
-    flex-direction: column; /* Stellt sicher, dass Inhalt untereinander ist */
-    padding-bottom: 20px; /* Platz für Buttons */
+    flex-direction: column;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .projekt-karte:hover {
-    transform: translateY(-10px) scale(1.02); /* Anheben und leicht vergrößern */
-    box-shadow: 0 15px 40px rgba(0, 219, 222, 0.2); /* Leichter Akzent-Schatten */
+    transform: translateY(-5px);
+    border-color: rgba(111, 255, 233, 0.4); /* Rand wird sichtbarer */
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 .projekt-bild {
     width: 100%;
-    height: 200px; /* Feste Höhe für Bilder */
-    object-fit: cover; /* Bild zuschneiden, nicht verzerren */
+    height: 220px;
+    object-fit: cover;
     display: block;
+    filter: grayscale(30%); /* Leicht entsättigt für technischen Look */
+    transition: filter 0.3s ease;
+}
+
+.projekt-karte:hover .projekt-bild {
+    filter: grayscale(0%);
 }
 
 .projekt-bild-placeholder {
     width: 100%;
-    height: 200px;
-    background-color: #333;
+    height: 220px;
+    background-color: #3A506B; /* Mittelblau */
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 1.2rem;
-    color: #888;
+    font-size: 1.8rem;
+    color: #0B132B;
+    font-weight: 600;
+    font-family: 'Roboto Mono', monospace;
 }
 
-.projekt-karte h3 {
-    font-size: 1.5rem;
-    margin: 20px 20px 10px 20px;
-    color: #fff;
+.projekt-inhalt {
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1; /* Nimmt restlichen Platz ein */
 }
 
-.projekt-karte p {
+.projekt-inhalt h3 {
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+.projekt-inhalt p {
     font-size: 0.95rem;
-    padding: 0 20px;
-    flex-grow: 1; /* Nimmt verfügbaren Platz ein */
-    color: #bdbdbd;
+    color: #CED4DA;
+    flex-grow: 1;
     margin-bottom: 20px;
 }
 
-.projekt-links {
-    padding: 0 20px;
+.projekt-tags {
+    margin-bottom: 20px;
     display: flex;
-    gap: 10px; /* Abstand zwischen Buttons */
-    flex-wrap: wrap; /* Buttons umbrechen bei Bedarf */
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.projekt-tags span {
+    background-color: rgba(136, 204, 238, 0.15); /* Transparenter Akzent */
+    color: #88CCEE; /* Heller Blauton */
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.projekt-links {
+    margin-top: auto; /* Drückt Links nach unten */
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .projekt-button {
     background-color: transparent;
-    color: #00dbde;
-    border: 1px solid #00dbde;
-    padding: 8px 15px;
-    border-radius: 20px;
+    color: #6FFFE9;
+    border: 1px solid #6FFFE9;
+    padding: 8px 18px;
+    border-radius: 4px;
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 500;
     transition: background-color 0.3s ease, color 0.3s ease;
-    display: inline-flex; /* Für Icon-Ausrichtung */
+    display: inline-flex;
     align-items: center;
-    gap: 5px; /* Abstand zwischen Text und Icon */
+    gap: 6px;
 }
 
 .projekt-button:hover {
-    background-color: #00dbde;
-    color: #121212;
+    background-color: rgba(111, 255, 233, 0.1); /* Leichter Hover-Hintergrund */
+    color: #88FFEE; /* Noch heller */
 }
 
 .projekt-button.github {
-    color: #bdbdbd;
-    border-color: #bdbdbd;
+    color: #ADB5BD; /* Grau für GitHub */
+    border-color: #ADB5BD;
 }
 
 .projekt-button.github:hover {
-    background-color: #bdbdbd;
-    color: #121212;
+    background-color: rgba(173, 181, 189, 0.1);
+    color: #CED4DA;
 }
 
 /* Footer */
 .footer {
     text-align: center;
-    padding: 30px 20px;
-    margin-top: 50px;
-    border-top: 1px solid #333; /* Leichte Trennlinie */
-    color: #888;
+    padding: 40px 20px;
+    margin-top: 80px;
+    border-top: 1px solid rgba(58, 80, 107, 0.5); /* Subtile Trennlinie */
+    color: #ADB5BD;
     font-size: 0.9rem;
     position: relative;
     z-index: 2;
-    background-color: #121212;
+    background-color: #0B132B; /* Gleicher Hintergrund wie Body */
 }
 
-/* Fade-In Animationen */
+/* Fade-In Animationen (unverändert gut) */
 .fade-in {
     opacity: 0;
     animation: fadeInAnimation 1s ease-out forwards;
-    animation-delay: 0.3s; /* Kleine Verzögerung für den Hero */
+    animation-delay: 0.3s;
 }
 
 .fade-in-scroll {
     opacity: 0;
-    transform: translateY(30px); /* Startet etwas weiter unten */
+    transform: translateY(30px);
     transition: opacity 0.8s ease-out, transform 0.8s ease-out;
 }
 
@@ -280,79 +348,91 @@ body {
     to { opacity: 1; }
 }
 
-@keyframes text-glow {
-    from {
-        text-shadow: 0 0 5px #00dbde, 0 0 10px #00dbde, 0 0 15px #fc00ff, 0 0 20px #fc00ff;
-    }
-    to {
-        text-shadow: 0 0 10px #00dbde, 0 0 15px #00dbde, 0 0 20px #fc00ff, 0 0 25px #fc00ff;
-    }
-}
-
-/* Easter Egg Styling (versteckt) */
+/* Easter Egg Styling (unverändert) */
 .easter-egg-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.9);
+    background-color: rgba(0, 0, 0, 0.95); /* Noch etwas dunkler */
     z-index: 1000;
-    display: none; /* Standardmäßig versteckt */
+    display: none;
     justify-content: center;
     align-items: center;
     text-align: center;
     flex-direction: column;
-    color: #0f0; /* Matrix-Grün */
-    font-family: 'Courier New', Courier, monospace;
+    color: #39FF14; /* Helleres Matrix-Grün */
+    font-family: 'Roboto Mono', monospace; /* Monospace für den Effekt */
     font-size: 1.5rem;
-    cursor: pointer; /* Zum Schließen */
+    cursor: pointer;
+    padding: 20px;
 }
-
 .easter-egg-overlay p {
     margin-bottom: 20px;
-    animation: matrix-flicker 0.1s infinite alternate;
+    text-shadow: 0 0 5px #39FF14;
+    animation: matrix-flicker 0.15s infinite alternate;
 }
-
 .easter-egg-overlay span {
     font-size: 1rem;
-    color: #0a0;
+    color: #2AAA0E; /* Dunkleres Grün */
+    margin-top: 10px;
 }
-
 @keyframes matrix-flicker {
-  0% { opacity: 0.8; }
+  0% { opacity: 0.7; }
   100% { opacity: 1; }
 }
 
-/* Responsiveness */
-@media (max-width: 768px) {
-    .hero-content h1 {
-        font-size: 2.5rem;
+/* Responsiveness Anpassungen */
+@media (max-width: 992px) {
+    .about-content {
+        grid-template-columns: 1fr; /* Spalten untereinander */
+        gap: 30px;
     }
-    .hero-content .subtitle {
-        font-size: 1.2rem;
-    }
-    .section-title {
-        font-size: 2rem;
-    }
-    .projekt-grid {
-        grid-template-columns: 1fr; /* Eine Spalte auf kleinen Bildschirmen */
+    .social-links {
+        text-align: center; /* Links zentrieren */
+        margin-top: 20px;
     }
     .social-links a {
-        font-size: 1.5rem;
-        margin: 0 10px;
+        display: inline-block; /* Nebeneinander */
+        margin: 0 15px;
+    }
+}
+
+@media (max-width: 768px) {
+    .section-title {
+        font-size: 2.2rem;
+        margin-bottom: 40px;
+    }
+    .content-section {
+        padding: 80px 15px;
+    }
+    .projekt-karte {
+        /* Keine Änderung nötig, da Grid bereits responsive ist */
+    }
+    .about-text p {
+        font-size: 1rem;
     }
 }
 
 @media (max-width: 480px) {
+    body {
+         background-size: 30px 30px; /* Größeres Grid auf kleinen Screens */
+    }
     .hero-content h1 {
-        font-size: 2rem;
+        letter-spacing: 0.5px;
     }
-     .hero-content .subtitle {
-        font-size: 1rem;
-    }
-    .cta-button {
-        padding: 10px 20px;
+    .hero-content .tagline {
         font-size: 0.9rem;
     }
-}
+    .cta-button {
+        padding: 10px 25px;
+    }
+    .projekt-tags span {
+        font-size: 0.75rem;
+    }
+    .projekt-button {
+        font-size: 0.85rem;
+        padding: 7px 15px;
+    }
+    }
