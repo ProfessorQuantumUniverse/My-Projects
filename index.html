@@ -3,74 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dein Name - Portfolio</title>
+    <title>Dein Name - Digitaler Kosmos</title> {/* Titel angepasst */}
     <link rel="stylesheet" href="style.css">
-    <!-- Google Fonts für einen modernen, klaren Look -->
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"> {/* Space Mono für Akzente */}
     <!-- Font Awesome für Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-    <!-- Partikel Hintergrund Container -->
+    <!-- Partikel Hintergrund Container (repräsentiert Sterne/Kosmos) -->
     <div id="particles-js"></div>
 
     <!-- Header / Hero Section -->
     <header class="hero">
         <div class="hero-content fade-in">
             <h1>[Dein Name]</h1>
-            <p class="subtitle">[Deine Berufsbezeichnung / Kurzbeschreibung, z.B. Softwareentwickler | Datenanalyst | Technischer Innovator]</p>
-            <p class="tagline">Code, Daten und Design verbinden, um innovative Lösungen zu schaffen.</p>
-            <a href="#projekte" class="cta-button">Projekte entdecken</a>
+            <p class="subtitle">[Deine Berufsbezeichnung] | Digitaler Entdecker</p>
+            {/* Neuer Spruch */}
+            <p class="tagline">Charting new constellations in code and data.</p>
+            <a href="#explorations" class="cta-button">Meine Explorationen <i class="fas fa-meteor"></i></a> {/* Angepasster Button-Text & Icon */}
         </div>
         <div class="scroll-down-indicator">
-            <i class="fas fa-chevron-down"></i>
+            <i class="fas fa-angle-double-down"></i> {/* Anderes Icon */}
         </div>
     </header>
 
     <!-- Über Mich Sektion -->
     <section id="ueber-mich" class="content-section">
-        <h2 class="section-title">Profil</h2>
+         {/* Titel leicht angepasst */}
+        <h2 class="section-title">Meine Koordinaten</h2>
         <div class="about-content">
             <div class="about-text fade-in-scroll">
                 <p>
-                    Hallo! Ich bin [Dein Name], ein(e) [Deine Rolle] mit einer Leidenschaft für [Deine Hauptinteressen, z.B. komplexe Algorithmen, benutzerzentriertes Design, Datenvisualisierung].
-                    Mein Ziel ist es, Technologie einzusetzen, um Probleme elegant zu lösen und Mehrwert zu schaffen. Auf dieser Seite präsentiere ich eine Auswahl meiner Arbeiten und Experimente.
-                    Ich bin stets bestrebt, neue Technologien zu erlernen und meine Fähigkeiten zu erweitern.
+                    Willkommen in meinem digitalen Observatorium! Ich bin [Dein Name], ein(e) [Deine Rolle], fasziniert von den unendlichen Möglichkeiten an der Schnittstelle von [Deine Hauptinteressen].
+                    {/* Neuer Satz */}
+                    Wie ein Astronom, der den Nachthimmel kartiert, strebe ich danach, komplexe Systeme zu verstehen und elegante Lösungen im weiten Feld der Technologie zu entwickeln.
+                    Diese Seite ist ein Logbuch meiner technischen Reisen und Entdeckungen.
                 </p>
                 <div class="skills-preview">
-                    <!-- Optional: Füge hier ein paar Kernkompetenzen hinzu -->
-                    <span>Python</span> <span>JavaScript</span> <span>React</span> <span>Data Science</span> <span>UX/UI</span>
+                    <span>Python</span> <span>JavaScript</span> <span>Deep Learning</span> <span>Astrophysics Simulation (Beispiel)</span> <span>Data Viz</span>
                 </div>
             </div>
             <div class="social-links fade-in-scroll">
-                <a href="https://github.com/DEIN_GITHUB_USERNAME" target="_blank" title="GitHub"><i class="fab fa-github"></i></a>
-                <a href="https://linkedin.com/in/DEIN_LINKEDIN_PROFIL" target="_blank" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
-                <a href="mailto:deine.email@example.com" title="E-Mail"><i class="fas fa-envelope"></i></a>
-                <!-- Füge hier weitere relevante Links hinzu (z.B. ResearchGate, Kaggle) -->
+                 {/* Tooltips angepasst */}
+                <a href="https://github.com/DEIN_GITHUB_USERNAME" target="_blank" title="GitHub Sternwarte"><i class="fab fa-github"></i></a>
+                <a href="https://linkedin.com/in/DEIN_LINKEDIN_PROFIL" target="_blank" title="LinkedIn Netzwerk"><i class="fab fa-linkedin"></i></a>
+                <a href="mailto:deine.email@example.com" title="Kontakt aufnehmen (Signal senden)"><i class="fas fa-satellite-dish"></i></a> {/* Anderes Icon */}
+                {/* Füge hier weitere relevante Links hinzu (z.B. ORCID, arXiv) */}
             </div>
         </div>
     </section>
 
     <!-- Projekte Sektion -->
-    <section id="projekte" class="content-section">
-        <h2 class="section-title">Projekte</h2>
+    {/* ID und Titel angepasst */}
+    <section id="explorations" class="content-section">
+        <h2 class="section-title">Explorationen & Projekte</h2>
         <div class="projekt-grid">
 
             <!-- Projekt 1 (Beispiel) -->
             <div class="projekt-karte fade-in-scroll">
-                 <div class="projekt-bild-placeholder">P-01</div> <!-- Technischer Placeholder -->
-                <!-- <img src="bild-projekt1.jpg" alt="Vorschaubild Projekt 1" class="projekt-bild"> -->
+                 {/* Angepasster Platzhalter */}
+                 <div class="projekt-bild-placeholder">EXP-01</div>
                 <div class="projekt-inhalt">
-                    <h3>Projekt Titel 1: Datenanalyse Dashboard</h3>
-                    <p>Entwicklung eines interaktiven Dashboards zur Visualisierung von [Art der Daten] unter Verwendung von [Technologie 1] und [Technologie 2]. Fokus auf Performance und intuitive Bedienung.</p>
+                    <h3>Stellare Datenvisualisierung</h3> {/* Angepasster Titel */}
+                    <p>Entwicklung eines interaktiven Dashboards zur Visualisierung stellarer Katalogdaten (z.B. Gaia). Fokus auf Performance und intuitive Exploration von Mustern im Datensatz.</p>
                     <div class="projekt-tags">
-                        <span>Python</span><span>Pandas</span><span>Plotly</span><span>Web App</span>
+                        <span>Python</span><span>Plotly</span><span>Astronomie</span><span>Web App</span>
                     </div>
                     <div class="projekt-links">
-                        <a href="LINK_ZUM_LIVE_PROJEKT_1" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
+                        <a href="LINK_ZUM_LIVE_PROJEKT_1" target="_blank" class="projekt-button">Live Demo <i class="fas fa-rocket"></i></a>
                         <a href="LINK_ZUM_GITHUB_REPO_1" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
                     </div>
                 </div>
@@ -78,15 +82,15 @@
 
             <!-- Projekt 2 (Beispiel) -->
             <div class="projekt-karte fade-in-scroll">
-                <div class="projekt-bild-placeholder">P-02</div>
+                <div class="projekt-bild-placeholder">EXP-02</div>
                 <div class="projekt-inhalt">
-                    <h3>Projekt Titel 2: Machine Learning Modell</h3>
-                    <p>Implementierung eines [Art des Modells]-Modells zur [Zweck des Modells]. Training und Evaluation auf [Datensatz]. Einsatz von [Technologie 3].</p>
-                    <div class="projekt-tags">
-                        <span>Machine Learning</span><span>Scikit-learn</span><span>Jupyter</span><span>Forschung</span>
+                    <h3>Simulation Galaktischer Dynamik</h3> {/* Angepasster Titel */}
+                    <p>Implementierung eines N-body Algorithmus zur Simulation der Gravitationswechselwirkung von Sternsystemen. Vergleich verschiedener Integrationsmethoden.</p>
+                     <div class="projekt-tags">
+                        <span>Computational Physics</span><span>C++</span><span>Simulation</span><span>HPC (Beispiel)</span>
                     </div>
                     <div class="projekt-links">
-                        <!-- <a href="#" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a> -->
+                        {/* <a href="#" target="_blank" class="projekt-button">Ergebnisse <i class="fas fa-chart-line"></i></a> */}
                         <a href="LINK_ZUM_GITHUB_REPO_2" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
                     </div>
                 </div>
@@ -94,17 +98,16 @@
 
             <!-- Projekt 3 (Beispiel) -->
              <div class="projekt-karte fade-in-scroll">
-                <!-- <img src="bild-projekt3.jpg" alt="Vorschaubild Projekt 3" class="projekt-bild"> -->
-                 <div class="projekt-bild-placeholder">P-03</div>
+                 <div class="projekt-bild-placeholder">EXP-03</div>
                 <div class="projekt-inhalt">
-                    <h3>Projekt Titel 3: Webbasierte Simulation</h3>
-                    <p>Erstellung einer [Art der Simulation]-Simulation im Browser mit [Technologie 4, z.B. Three.js oder p5.js]. Erforschung von [Konzept].</p>
+                    <h3>Exoplaneten Transit Detektor (Konzept)</h3> {/* Angepasster Titel */}
+                    <p>Konzeptionelles Design eines Machine-Learning-Modells zur Detektion von Exoplaneten-Transitsignalen in Lichtkurvendaten (z.B. von TESS oder Kepler).</p>
                     <div class="projekt-tags">
-                        <span>JavaScript</span><span>Simulation</span><span>Visualisierung</span><span>Web Dev</span>
+                        <span>Machine Learning</span><span>Konzept</span><span>Datenanalyse</span><span>Signalverarbeitung</span>
                     </div>
                     <div class="projekt-links">
-                        <a href="LINK_ZUM_LIVE_PROJEKT_3" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
-                        <a href="LINK_ZUM_GITHUB_REPO_3" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                        {/* <a href="LINK_ZUM_PAPER_ODER_BLOGPOST_3" target="_blank" class="projekt-button">Details <i class="fas fa-book-open"></i></a> */}
+                        <a href="LINK_ZUM_GITHUB_REPO_3" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code (falls vorhanden)</a>
                     </div>
                 </div>
             </div>
@@ -116,13 +119,14 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>© <span id="current-year"></span> [Dein Name]. Konstruiert mit Code und Kaffee.</p>
-        <!-- Konami Code Hinweis bleibt im JS ;) -->
+         {/* Neuer Spruch */}
+        <p>© <span id="current-year"></span> [Dein Name]. Exploring the digital universe, one commit at a time.</p>
     </footer>
 
-    <!-- JavaScript Libraries (Particles.js) -->
+    <!-- Easter Egg Overlay (HTML wird in JS generiert) -->
+
+    <!-- JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-    <!-- Dein eigenes JavaScript -->
     <script src="script.js"></script>
 </body>
 </html>
