@@ -1,27 +1,27 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- Partikel Effekt Initialisierung (Wissenschaftlicher Look) ---
+    // --- Partikel Effekt Initialisierung (Kosmos/Sterne Look) ---
     particlesJS('particles-js', {
         particles: {
-            number: { value: 100, density: { enable: true, value_area: 1000 } }, // Mehr, aber weniger dicht
-            color: { value: "#88CCEE" }, // Heller Blauton für Partikel
-            shape: { type: "circle", stroke: { width: 0, color: "#000000" }, polygon: { nb_sides: 5 } },
-            opacity: { value: 0.4, random: true, anim: { enable: false, speed: 1, opacity_min: 0.1, sync: false } }, // Leichte Zufallsopazität
-            size: { value: 2.5, random: true, anim: { enable: false, speed: 40, size_min: 0.5, sync: false } }, // Kleinere Partikel
-            line_linked: { enable: true, distance: 120, color: "#3A506B", opacity: 0.25, width: 1 }, // Subtilere Linien in Mittelblau
-            move: { enable: true, speed: 1.5, direction: "none", random: false, straight: false, out_mode: "out", bounce: false, attract: { enable: false, rotateX: 600, rotateY: 1200 } } // Langsamere Bewegung
+            number: { value: 160, density: { enable: true, value_area: 800 } }, // Mehr Sterne
+            color: { value: ["#FFFFFF", "#70D6FF", "#FFDAB9"] }, // Weiß, Hellcyan, Blasses Orange (verschiedene Sterntypen)
+            shape: { type: "circle" },
+            opacity: { value: 0.8, random: true, anim: { enable: true, speed: 0.5, opacity_min: 0.1, sync: false } }, // Pulsierende Sterne
+            size: { value: 1.5, random: true, anim: { enable: true, speed: 2, size_min: 0.3, sync: false } }, // Leicht Größenändernde Sterne
+            line_linked: { enable: true, distance: 50, color: "#1a2a4a", opacity: 0.2, width: 1 }, // Sehr subtile "Konstellations"-Linien
+            move: { enable: true, speed: 0.4, direction: "none", random: true, straight: false, out_mode: "out", bounce: false, attract: { enable: false, rotateX: 600, rotateY: 1200 } } // Langsame, zufällige Bewegung
         },
         interactivity: {
             detect_on: "canvas",
             events: {
-                onhover: { enable: true, mode: "bubble" }, // Blasen statt Wegstoßen
-                onclick: { enable: true, mode: "push" },
+                onhover: { enable: true, mode: "bubble" }, // Blasen beim Hovern (wie Gravitationslinse)
+                onclick: { enable: false }, // Klick deaktiviert für ruhigeren Effekt
                 resize: true
             },
             modes: {
-                grab: { distance: 200, line_opacity: 0.5 },
-                bubble: { distance: 150, size: 4, duration: 2, opacity: 0.8, speed: 3 }, // Kleinere Blasen
-                repulse: { distance: 100, duration: 0.4 },
+                grab: { distance: 100, line_opacity: 0.5 },
+                bubble: { distance: 120, size: 3, duration: 2, opacity: 1, speed: 3 }, // Subtilere Blasen
+                repulse: { distance: 80, duration: 0.4 },
                 push: { particles_nb: 4 },
                 remove: { particles_nb: 2 }
             }
@@ -38,11 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Fade-In Effekt beim Scrollen (unverändert) ---
-    const observerOptions = {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1
-    };
+    const observerOptions = { root: null, rootMargin: '0px', threshold: 0.1 };
     const observerCallback = (entries, observer) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -55,20 +51,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const fadeElements = document.querySelectorAll('.fade-in-scroll');
     fadeElements.forEach(el => scrollObserver.observe(el));
 
-    // --- Easter Egg: Konami Code (unverändert) ---
+    // --- Easter Egg: Konami Code (Text angepasst) ---
     const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
     let konamiIndex = 0;
     let easterEggActive = false;
 
-    // Nur erstellen, wenn nicht schon vorhanden (falls Skript mehrmals läuft)
     let easterEggOverlay = document.querySelector('.easter-egg-overlay');
     if (!easterEggOverlay) {
         easterEggOverlay = document.createElement('div');
         easterEggOverlay.classList.add('easter-egg-overlay');
+        // Neuer Easter Egg Text
         easterEggOverlay.innerHTML = `
-            <p>SYSTEMPROTOKOLL 42: EASTER EGG INITIALISIERT</p>
-            <p>Zugangscode akzeptiert. Willkommen im Systemkern.</p>
-            <span>(Klicken zum Dekonnektieren)</span>
+            <p>SIGNAL EMPFANGEN: WARP-KERN AKTIVIERT!</p>
+            <p>Versteckte Sektoren des digitalen Kosmos werden nun kartiert...</p>
+            <span>(Klicken, um zum Standard-Subraum zurückzukehren)</span>
         `;
         document.body.appendChild(easterEggOverlay);
 
@@ -81,28 +77,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (easterEggActive) return;
-
-        if (e.key.toLowerCase() === konamiCode[konamiIndex].toLowerCase()) { // Sicherstellen, dass Groß/Kleinschreibung egal ist
+        if (e.key.toLowerCase() === konamiCode[konamiIndex].toLowerCase()) {
             konamiIndex++;
             if (konamiIndex === konamiCode.length) {
-                console.log('Konami Code Activated! SYSTEMPROTOKOLL 42');
+                console.log('Konami Code Accepted! Engaging Warp Drive...'); // Konsolennachricht angepasst
                 easterEggOverlay.style.display = 'flex';
                 easterEggActive = true;
                 konamiIndex = 0;
             }
         } else {
-             // Reset nur, wenn die Taste nicht Teil der Sequenz ist (ignoriert z.B. Shift)
-            if (!konamiCode.includes(e.key)) {
-                 konamiIndex = 0;
-            } else if (e.key.toLowerCase() !== konamiCode[0].toLowerCase()) {
-                 // Spezialfall: Wenn eine falsche Taste gedrückt wird, die aber Teil des Codes ist (z.B. Pfeil unten statt oben)
+            if (!konamiCode.includes(e.key.toLowerCase()) || e.key.toLowerCase() !== konamiCode[0].toLowerCase()) {
                  konamiIndex = 0;
             }
-
         }
     });
 
     // Konsolen-Hinweis
-    console.log("Psst... Entwickler! Ein alter Code öffnet vielleicht versteckte Türen... (↑ ↑ ↓ ↓ ← → ← → B A)");
+    console.log("Psst... Suche nach einem alten Code, um die Navigation zu beschleunigen (↑ ↑ ↓ ↓ ← → ← → B A)");
 
 }); // Ende DOMContentLoaded
