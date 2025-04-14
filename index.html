@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dein Name - Portfolio</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Google Fonts für einen modernen Look -->
+    <!-- Google Fonts für einen modernen, klaren Look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome für Icons (optional, aber schick) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+    <!-- Font Awesome für Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -20,9 +20,10 @@
     <!-- Header / Hero Section -->
     <header class="hero">
         <div class="hero-content fade-in">
-            <h1>Hallo, ich bin [Dein Name]!</h1>
-            <p class="subtitle">Kreativer Entwickler | Web Enthusiast | Problemlöser</p>
-            <a href="#projekte" class="cta-button">Meine Projekte ansehen</a>
+            <h1>[Dein Name]</h1>
+            <p class="subtitle">[Deine Berufsbezeichnung / Kurzbeschreibung, z.B. Softwareentwickler | Datenanalyst | Technischer Innovator]</p>
+            <p class="tagline">Code, Daten und Design verbinden, um innovative Lösungen zu schaffen.</p>
+            <a href="#projekte" class="cta-button">Projekte entdecken</a>
         </div>
         <div class="scroll-down-indicator">
             <i class="fas fa-chevron-down"></i>
@@ -31,68 +32,92 @@
 
     <!-- Über Mich Sektion -->
     <section id="ueber-mich" class="content-section">
-        <h2 class="section-title">Über Mich</h2>
-        <p class="fade-in-scroll">
-            Willkommen auf meiner Seite! Ich bin [Dein Name] und begeistere mich für [Deine Hauptinteressen, z.B. Webentwicklung, Design, Datenanalyse].
-            Ich liebe es, Ideen in funktionierende und ästhetisch ansprechende Projekte umzusetzen. Hier findest du eine Auswahl meiner Arbeiten.
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        </p>
-        <div class="social-links fade-in-scroll">
-            <a href="https://github.com/DEIN_GITHUB_USERNAME" target="_blank" title="GitHub"><i class="fab fa-github"></i></a>
-            <a href="https://linkedin.com/in/DEIN_LINKEDIN_PROFIL" target="_blank" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
-            <a href="mailto:deine.email@example.com" title="E-Mail"><i class="fas fa-envelope"></i></a>
-            <!-- Füge hier weitere Links hinzu -->
+        <h2 class="section-title">Profil</h2>
+        <div class="about-content">
+            <div class="about-text fade-in-scroll">
+                <p>
+                    Hallo! Ich bin [Dein Name], ein(e) [Deine Rolle] mit einer Leidenschaft für [Deine Hauptinteressen, z.B. komplexe Algorithmen, benutzerzentriertes Design, Datenvisualisierung].
+                    Mein Ziel ist es, Technologie einzusetzen, um Probleme elegant zu lösen und Mehrwert zu schaffen. Auf dieser Seite präsentiere ich eine Auswahl meiner Arbeiten und Experimente.
+                    Ich bin stets bestrebt, neue Technologien zu erlernen und meine Fähigkeiten zu erweitern.
+                </p>
+                <div class="skills-preview">
+                    <!-- Optional: Füge hier ein paar Kernkompetenzen hinzu -->
+                    <span>Python</span> <span>JavaScript</span> <span>React</span> <span>Data Science</span> <span>UX/UI</span>
+                </div>
+            </div>
+            <div class="social-links fade-in-scroll">
+                <a href="https://github.com/DEIN_GITHUB_USERNAME" target="_blank" title="GitHub"><i class="fab fa-github"></i></a>
+                <a href="https://linkedin.com/in/DEIN_LINKEDIN_PROFIL" target="_blank" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
+                <a href="mailto:deine.email@example.com" title="E-Mail"><i class="fas fa-envelope"></i></a>
+                <!-- Füge hier weitere relevante Links hinzu (z.B. ResearchGate, Kaggle) -->
+            </div>
         </div>
     </section>
 
     <!-- Projekte Sektion -->
     <section id="projekte" class="content-section">
-        <h2 class="section-title">Meine Projekte</h2>
+        <h2 class="section-title">Projekte</h2>
         <div class="projekt-grid">
 
             <!-- Projekt 1 (Beispiel) -->
             <div class="projekt-karte fade-in-scroll">
-                <img src="placeholder-projekt1.jpg" alt="Vorschaubild Projekt 1" class="projekt-bild"> <!-- Ersetze dies mit einem echten Bild -->
-                <h3>Projekt Titel 1</h3>
-                <p>Eine kurze, knackige Beschreibung deines ersten Projekts. Was macht es? Welche Technologien wurden verwendet?</p>
-                <div class="projekt-links">
-                    <a href="LINK_ZUM_LIVE_PROJEKT_1" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
-                    <a href="LINK_ZUM_GITHUB_REPO_1" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                 <div class="projekt-bild-placeholder">P-01</div> <!-- Technischer Placeholder -->
+                <!-- <img src="bild-projekt1.jpg" alt="Vorschaubild Projekt 1" class="projekt-bild"> -->
+                <div class="projekt-inhalt">
+                    <h3>Projekt Titel 1: Datenanalyse Dashboard</h3>
+                    <p>Entwicklung eines interaktiven Dashboards zur Visualisierung von [Art der Daten] unter Verwendung von [Technologie 1] und [Technologie 2]. Fokus auf Performance und intuitive Bedienung.</p>
+                    <div class="projekt-tags">
+                        <span>Python</span><span>Pandas</span><span>Plotly</span><span>Web App</span>
+                    </div>
+                    <div class="projekt-links">
+                        <a href="LINK_ZUM_LIVE_PROJEKT_1" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
+                        <a href="LINK_ZUM_GITHUB_REPO_1" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                    </div>
                 </div>
             </div>
 
             <!-- Projekt 2 (Beispiel) -->
             <div class="projekt-karte fade-in-scroll">
-                 <div class="projekt-bild-placeholder">Projekt 2</div> <!-- Alternativ, wenn du kein Bild hast -->
-                <h3>Projekt Titel 2</h3>
-                <p>Beschreibung für das zweite Projekt. Vielleicht etwas ganz anderes? Zeig deine Vielseitigkeit!</p>
-                 <div class="projekt-links">
-                    <!-- <a href="#" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a> -->
-                    <a href="LINK_ZUM_GITHUB_REPO_2" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                <div class="projekt-bild-placeholder">P-02</div>
+                <div class="projekt-inhalt">
+                    <h3>Projekt Titel 2: Machine Learning Modell</h3>
+                    <p>Implementierung eines [Art des Modells]-Modells zur [Zweck des Modells]. Training und Evaluation auf [Datensatz]. Einsatz von [Technologie 3].</p>
+                    <div class="projekt-tags">
+                        <span>Machine Learning</span><span>Scikit-learn</span><span>Jupyter</span><span>Forschung</span>
+                    </div>
+                    <div class="projekt-links">
+                        <!-- <a href="#" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a> -->
+                        <a href="LINK_ZUM_GITHUB_REPO_2" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                    </div>
                 </div>
             </div>
 
             <!-- Projekt 3 (Beispiel) -->
-            <div class="projekt-karte fade-in-scroll">
-                <img src="placeholder-projekt3.jpg" alt="Vorschaubild Projekt 3" class="projekt-bild"> <!-- Ersetze dies mit einem echten Bild -->
-                <h3>Projekt Titel 3</h3>
-                <p>Noch ein cooles Projekt. Hier könntest du z.B. auf eine besondere Herausforderung oder ein cooles Feature eingehen.</p>
-                 <div class="projekt-links">
-                    <a href="LINK_ZUM_LIVE_PROJEKT_3" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
-                    <a href="LINK_ZUM_GITHUB_REPO_3" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+             <div class="projekt-karte fade-in-scroll">
+                <!-- <img src="bild-projekt3.jpg" alt="Vorschaubild Projekt 3" class="projekt-bild"> -->
+                 <div class="projekt-bild-placeholder">P-03</div>
+                <div class="projekt-inhalt">
+                    <h3>Projekt Titel 3: Webbasierte Simulation</h3>
+                    <p>Erstellung einer [Art der Simulation]-Simulation im Browser mit [Technologie 4, z.B. Three.js oder p5.js]. Erforschung von [Konzept].</p>
+                    <div class="projekt-tags">
+                        <span>JavaScript</span><span>Simulation</span><span>Visualisierung</span><span>Web Dev</span>
+                    </div>
+                    <div class="projekt-links">
+                        <a href="LINK_ZUM_LIVE_PROJEKT_3" target="_blank" class="projekt-button">Live Demo <i class="fas fa-external-link-alt"></i></a>
+                        <a href="LINK_ZUM_GITHUB_REPO_3" target="_blank" class="projekt-button github"><i class="fab fa-github"></i> Code</a>
+                    </div>
                 </div>
             </div>
 
              <!-- Füge hier weitere Projekt-Karten hinzu -->
-             <!-- Kopiere einfach eine <div class="projekt-karte">...</div> Sektion und passe sie an -->
 
         </div>
     </section>
 
     <!-- Footer -->
     <footer class="footer">
-        <p>&copy; <span id="current-year"></span> [Dein Name]. Alle Rechte vorbehalten.</p>
-        <!-- Kleiner Hinweis für das Easter Egg im Code ;) -->
+        <p>© <span id="current-year"></span> [Dein Name]. Konstruiert mit Code und Kaffee.</p>
+        <!-- Konami Code Hinweis bleibt im JS ;) -->
     </footer>
 
     <!-- JavaScript Libraries (Particles.js) -->
