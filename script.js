@@ -81,67 +81,74 @@ if (controlsContainer) {
         yearElement.textContent = currentYear;
     }
 
-    // === CUSTOM COSMIC CURSOR ===
+    // === CUSTOM COSMIC CURSOR (Using requestAnimationFrame for Dot) ===
     const cursorDot = document.querySelector('.cursor-dot');
     const cursorTrail = document.querySelector('.cursor-trail');
     let mouseX = 0;
     let mouseY = 0;
+    let dotX = 0;
+    let dotY = 0;
+    let animationFrameId = null; // Um den Loop zu steuern
 
-    // Prüfen, ob Elemente gefunden wurden
     if (cursorDot && cursorTrail) {
-        console.log("Cursor elements found!"); // Testausgabe
+        console.log("Cursor elements found! Using requestAnimationFrame for Dot.");
 
-        const dotXQuick = gsap.quickSetter(cursorDot, "x", "px"); // Setzt die 'x'-Eigenschaft in Pixeln
-        const dotYQuick = gsap.quickSetter(cursorDot, "y", "px"); // Setzt die 'y'-Eigenschaft in Pixeln
-    
-        // Trail wird weiterhin normal animiert
-        const trailXTo = gsap.quickTo(cursorTrail, "x", { duration: 0.6, ease: "power1.out" }); // quickTo ist effizienter als .to in loops
+        // Trail wird weiterhin mit GSAP animiert
+        const trailXTo = gsap.quickTo(cursorTrail, "x", { duration: 0.6, ease: "power1.out" });
         const trailYTo = gsap.quickTo(cursorTrail, "y", { duration: 0.6, ease: "power1.out" });
-        // Initialisiere Position UND Sichtbarkeit mit GSAP
+
+        // Initialisiere Position UND Sichtbarkeit mit GSAP (geht immer noch)
         gsap.set([cursorDot, cursorTrail], {
             xPercent: -50,
             yPercent: -50,
-            opacity: 0, // Start unsichtbar
-            scale: 0    // Start klein
+            opacity: 0,
+            scale: 0
         });
 
+        // Funktion, die die Dot-Position aktualisiert
+        function updateDotPosition() {
+            // Direkte Style-Manipulation für den Dot
+            // Verwende eine kleine Interpolation für minimale Glättung (optional, kann entfernt werden)
+            const lerpFactor = 0.3; // Wert zwischen 0 (langsam) und 1 (sofort)
+            dotX += (mouseX - dotX) * lerpFactor;
+            dotY += (mouseY - dotY) * lerpFactor;
+            cursorDot.style.transform = `translate(${dotX}px, ${dotY}px) translate(-50%, -50%) scale(1)`; // scale(1) muss hier sein
+
+            // Nächsten Frame anfordern
+            animationFrameId = requestAnimationFrame(updateDotPosition);
+        }
+
         window.addEventListener('mousemove', (e) => {
-            const mouseX = e.clientX;
-            const mouseY = e.clientY;
-    
-            // Verwende die quickSetter für SOFORTIGE Aktualisierung des Dots
-            dotXQuick(mouseX);
-            dotYQuick(mouseY);
-    
-            // Verwende quickTo für die verzögerte Animation des Trails
+            mouseX = e.clientX; // Nur die Zielposition aktualisieren
+            mouseY = e.clientY;
+
+            // Trail-Animation auslösen
             trailXTo(mouseX);
             trailYTo(mouseY);
         });
-        // NEU: Verwende GSAP für Ein-/Ausblenden
+
+        // Ein-/Ausblenden mit GSAP
         document.addEventListener('mouseenter', () => {
-            
-            gsap.to([cursorDot, cursorTrail], {
-                duration: 0.3,
-                opacity: 1, // Setze Opazität auf 1
-                scale: 1,   // Setze Skalierung auf 1
-                ease: "power1.out"
-            });
+            if (!animationFrameId) { // Starte den rAF Loop nur, wenn er nicht schon läuft
+                dotX = mouseX; // Startposition setzen, um Sprung zu vermeiden
+                dotY = mouseY;
+                updateDotPosition();
+            }
+            gsap.to([cursorDot, cursorTrail], { duration: 0.3, opacity: 1, scale: 1, ease: "power1.out" });
         });
 
         document.addEventListener('mouseleave', () => {
-            
-            gsap.to([cursorDot, cursorTrail], {
-                duration: 0.3,
-                opacity: 0, // Setze Opazität auf 0
-                scale: 0,   // Setze Skalierung auf 0
-                ease: "power1.out"
-            });
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId); // Stoppe den rAF Loop
+                animationFrameId = null;
+            }
+            gsap.to([cursorDot, cursorTrail], { duration: 0.3, opacity: 0, scale: 0, ease: "power1.out" });
         });
 
     } else {
         console.error("Custom cursor elements (.cursor-dot or .cursor-trail) not found in HTML!");
     }
-        // === END CUSTOM COSMIC CURSOR ===
+    // === END CUSTOM COSMIC CURSOR ===
     // --- Fade-In Effekt beim Scrollen (unverändert) ---
     const observerOptions = { root: null, rootMargin: '0px', threshold: 0.1 };
     const observerCallback = (entries, observer) => {
