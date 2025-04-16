@@ -36,7 +36,7 @@ body {
         radial-gradient(ellipse at 80% 70%, rgba(166, 124, 255, 0.07) 0%, transparent 70%); /* Violetter Nebel */
     background-size: 20px 20px, 100% 100%, 100% 100%;
     background-attachment: fixed; /* Hält Nebel fixiert */
-    cursor: none;
+    /*cursor: none;*/
 }
 
 /* Partikel Hintergrund Styling */
