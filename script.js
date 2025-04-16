@@ -199,3 +199,4 @@ if (controlsContainer) {
     console.log("Psst... Suche nach einem alten Code, um die Navigation zu beschleunigen (↑ ↑ ↓ ↓ ← → ← → B A)");
 
 }); // Ende DOMContentLoaded
+
