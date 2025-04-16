@@ -46,7 +46,7 @@ if (controlsContainer) {
 
            switch (action) {
                case 'more-particles':
-                   particleConfig.particles.number.value += 50; // Erhöhe Wert
+                   particleConfig.particles.number.value += 300; // Erhöhe Wert
                    configChanged = true;
                    break;
                case 'less-particles':
@@ -104,12 +104,12 @@ if (controlsContainer) {
             mouseY = e.clientY;
 
             gsap.to(cursorDot, {
-                duration: 0.01,
+                duration: 0,
                 x: mouseX,
                 y: mouseY,
             });
             gsap.to(cursorTrail, {
-                duration: 0.01,
+                duration: 0,
                 x: mouseX,
                 y: mouseY,
             });
@@ -117,17 +117,17 @@ if (controlsContainer) {
 
         // NEU: Verwende GSAP für Ein-/Ausblenden
         document.addEventListener('mouseenter', () => {
-            console.log("Mouse enter"); // Testausgabe
+            
             gsap.to([cursorDot, cursorTrail], {
                 duration: 0.3,
                 opacity: 1, // Setze Opazität auf 1
                 scale: 1,   // Setze Skalierung auf 1
-             ease: "power1.out"
+                ease: "power1.out"
             });
         });
 
         document.addEventListener('mouseleave', () => {
-            console.log("Mouse leave"); // Testausgabe
+            
             gsap.to([cursorDot, cursorTrail], {
                 duration: 0.3,
                 opacity: 0, // Setze Opazität auf 0
