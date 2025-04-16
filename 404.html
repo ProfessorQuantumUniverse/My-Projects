@@ -1,1 +1,130 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Lost in Hyperspace</title>
+    <link rel="stylesheet" href="style.css"> <!-- Link zu deinem Haupt-CSS -->
+    <!-- Füge hier ggf. Fonts und FontAwesome hinzu, wie in index.html -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Zusätzliche Styles nur für 404 */
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-align: center;
+            overflow: hidden; /* Verhindert Scrollen, falls Partikel aktiv */
+        }
+        #particles-js { z-index: -1; } /* Stellt sicher, dass Partikel im Hintergrund sind */
+        .error-container {
+            position: relative; /* Wichtig für z-index über Partikel */
+            z-index: 2;
+            max-width: 600px;
+            padding: 20px;
+        }
+        .error-code {
+            font-family: var(--font-headline, 'Exo 2', sans-serif);
+            font-size: clamp(6rem, 25vw, 12rem);
+            color: var(--color-accent-blue, #58a6ff);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 15px rgba(88, 166, 255, 0.5);
+            opacity: 0; /* Start für Animation */
+            transform: scale(0.5); /* Start für Animation */
+        }
+        .error-message {
+            font-family: var(--font-secondary, 'Space Mono', monospace);
+            font-size: 1.5rem;
+            color: var(--color-text-primary, #c9d1d9);
+            margin-bottom: 1rem;
+             opacity: 0; /* Start für Animation */
+             transform: translateY(20px); /* Start für Animation */
+        }
+        .error-description {
+            color: var(--color-text-secondary, #8b949e);
+            margin-bottom: 2rem;
+            opacity: 0; /* Start für Animation */
+            transform: translateY(20px); /* Start für Animation */
+        }
+        .home-link {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(45deg, var(--color-accent-blue, #58a6ff), var(--color-accent-purple, #bc8cff));
+            color: #fff;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: transform 0.3s, box-shadow 0.3s;
+            opacity: 0; /* Start für Animation */
+            transform: translateY(20px); /* Start für Animation */
+        }
+        .home-link:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(88, 166, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Partikel Hintergrund (optional, aber cool) -->
+    <div id="particles-js"></div>
 
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <div class="error-message">Lost in Hyperspace</div>
+        <p class="error-description">
+            It seems the page you were looking for has drifted beyond the known sectors.
+            Let's get you back to charted territory.
+        </p>
+        <a href="/" class="home-link"><i class="fas fa-shuttle-space"></i> Return to Base</a> <!-- Link zur Startseite -->
+    </div>
+
+    <!-- Lade Particles.js und ggf. kleine Animationen -->
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script> <!-- GSAP für Animation -->
+    <script>
+        // Partikel Initialisierung (kopiere deine Konfiguration aus script.js)
+        particlesJS('particles-js', {
+            particles: {
+            number: { value: 330, density: { enable: true, value_area: 800 } }, // Mehr Sterne
+            color: { value: ["#FFFFFF", "#70D6FF", "#FFDAB9"] }, // Weiß, Hellcyan, Blasses Orange (verschiedene Sterntypen)
+            shape: { type: "circle" },
+            opacity: { value: 0.8, random: true, anim: { enable: true, speed: 0.5, opacity_min: 0.1, sync: false } }, // Pulsierende Sterne
+            size: { value: 1.5, random: true, anim: { enable: true, speed: 2, size_min: 0.3, sync: false } }, // Leicht Größenändernde Sterne
+            line_linked: { enable: true, distance: 50, color: "#1a2a4a", opacity: 0.2, width: 1 }, // Sehr subtile "Konstellations"-Linien
+            move: { enable: true, speed: 0.6, direction: "none", random: true, straight: false, out_mode: "out", bounce: false, attract: { enable: false, rotateX: 600, rotateY: 1200 } } // Langsame, zufällige Bewegung
+        },
+        interactivity: {
+            detect_on: "canvas",
+            events: {
+                onhover: { enable: true, mode: "bubble" }, // Blasen beim Hovern (wie Gravitationslinse)
+                onclick: { enable: false }, // Klick deaktiviert für ruhigeren Effekt
+                resize: true
+            },
+            modes: {
+                grab: { distance: 100, line_opacity: 0.5 },
+                bubble: { distance: 120, size: 3, duration: 2, opacity: 1, speed: 3 }, // Subtilere Blasen
+                repulse: { distance: 80, duration: 0.4 },
+                push: { particles_nb: 4 },
+                remove: { particles_nb: 2 }
+            }
+        },
+        retina_detect: true});
+        // Einfache GSAP Animation für den Inhalt
+        gsap.to(".error-code", { opacity: 1, scale: 1, duration: 1, ease: "elastic.out(1, 0.5)", delay: 0.2 });
+        gsap.to(".error-message, .error-description, .home-link", {
+             opacity: 1,
+             y: 0,
+             duration: 0.8,
+             stagger: 0.15,
+             ease: "power2.out",
+             delay: 0.5
+         });
+    </script>
+</body>
+</html>
