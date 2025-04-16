@@ -142,12 +142,6 @@ body {
     /* Der Trail wird per JS verzögert */
 }
 
-/* Sichtbar machen, wenn Maus im Fenster ist (wird per JS gesteuert) */
-body:hover .cursor-dot,
-body:hover .cursor-trail {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-}
 
 /* Optional: Cursor ändern, wenn über Links/Buttons */
 a:hover ~ .cursor-dot,
