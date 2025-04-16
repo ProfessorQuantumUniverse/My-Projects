@@ -81,7 +81,7 @@ if (controlsContainer) {
         yearElement.textContent = currentYear;
     }
 
-    // === CUSTOM COSMIC CURSOR (Using requestAnimationFrame for Dot) ===
+    // === CUSTOM COSMIC CURSOR (Using requestAnimationFrame for Dot!) ===
     const cursorDot = document.querySelector('.cursor-dot');
     const cursorTrail = document.querySelector('.cursor-trail');
     let mouseX = 0;
