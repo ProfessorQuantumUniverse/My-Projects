@@ -37,6 +37,48 @@ document.addEventListener('DOMContentLoaded', () => {
         yearElement.textContent = currentYear;
     }
 
+    // === CUSTOM COSMIC CURSOR ===
+    const cursorDot = document.querySelector('.cursor-dot');
+    const cursorTrail = document.querySelector('.cursor-trail');
+    let mouseX = 0;
+    let mouseY = 0;
+
+    // Initialisiere die Positionen (um Sprung am Anfang zu vermeiden)
+    gsap.set(cursorDot, { xPercent: -50, yPercent: -50 });
+    gsap.set(cursorTrail, { xPercent: -50, yPercent: -50 });
+
+    window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+
+        // Dot folgt sofort
+        gsap.to(cursorDot, {
+            duration: 0.2, // Sehr kurze Verzögerung für etwas Glättung
+            x: mouseX,
+            y: mouseY,
+            ease: "power1.out"
+        });
+
+        // Trail folgt verzögert
+        gsap.to(cursorTrail, {
+            duration: 0.6, // Längere Verzögerung für den Schweif-Effekt
+            x: mouseX,
+            y: mouseY,
+            ease: "power1.out"
+        });
+    });
+
+// Cursor ein-/ausblenden bei Betreten/Verlassen des Fensters
+document.addEventListener('mouseleave', () => {
+     if (cursorDot) cursorDot.style.opacity = '0';
+     if (cursorTrail) cursorTrail.style.opacity = '0';
+ });
+
+ document.addEventListener('mouseenter', () => {
+     if (cursorDot) cursorDot.style.opacity = '1';
+     if (cursorTrail) cursorTrail.style.opacity = '1';
+ });
+
     // --- Fade-In Effekt beim Scrollen (unverändert) ---
     const observerOptions = { root: null, rootMargin: '0px', threshold: 0.1 };
     const observerCallback = (entries, observer) => {
