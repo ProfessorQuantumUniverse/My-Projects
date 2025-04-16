@@ -68,16 +68,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-// Cursor ein-/ausblenden bei Betreten/Verlassen des Fensters
-document.addEventListener('mouseleave', () => {
-     if (cursorDot) cursorDot.style.opacity = '0';
-     if (cursorTrail) cursorTrail.style.opacity = '0';
- });
+    // Cursor ein-/ausblenden bei Betreten/Verlassen des Fensters
+    document.addEventListener('mouseleave', () => {
+        if (cursorDot) cursorDot.style.opacity = '0';
+        if (cursorTrail) cursorTrail.style.opacity = '0';
+    });
 
- document.addEventListener('mouseenter', () => {
-     if (cursorDot) cursorDot.style.opacity = '1';
-     if (cursorTrail) cursorTrail.style.opacity = '1';
- });
+    document.addEventListener('mouseenter', () => {
+        if (cursorDot) cursorDot.style.opacity = '1';
+        if (cursorTrail) cursorTrail.style.opacity = '1';
+    });
 
     // --- Fade-In Effekt beim Scrollen (unverändert) ---
     const observerOptions = { root: null, rootMargin: '0px', threshold: 0.1 };
