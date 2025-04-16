@@ -60,16 +60,14 @@ if (cursorDot && cursorTrail) {
         mouseY = e.clientY;
 
         gsap.to(cursorDot, {
-            duration: 0.2,
+            duration: 0.01,
             x: mouseX,
             y: mouseY,
-            ease: "power1.out"
         });
         gsap.to(cursorTrail, {
-            duration: 0.6,
+            duration: 0.01,
             x: mouseX,
             y: mouseY,
-            ease: "power1.out"
         });
     });
 
