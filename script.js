@@ -91,6 +91,12 @@ if (controlsContainer) {
     if (cursorDot && cursorTrail) {
         console.log("Cursor elements found!"); // Testausgabe
 
+        const dotXQuick = gsap.quickSetter(cursorDot, "x", "px"); // Setzt die 'x'-Eigenschaft in Pixeln
+        const dotYQuick = gsap.quickSetter(cursorDot, "y", "px"); // Setzt die 'y'-Eigenschaft in Pixeln
+    
+        // Trail wird weiterhin normal animiert
+        const trailXTo = gsap.quickTo(cursorTrail, "x", { duration: 0.6, ease: "power1.out" }); // quickTo ist effizienter als .to in loops
+        const trailYTo = gsap.quickTo(cursorTrail, "y", { duration: 0.6, ease: "power1.out" });
         // Initialisiere Position UND Sichtbarkeit mit GSAP
         gsap.set([cursorDot, cursorTrail], {
             xPercent: -50,
@@ -100,21 +106,17 @@ if (controlsContainer) {
         });
 
         window.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-
-            gsap.to(cursorDot, {
-                duration: 0,
-                x: mouseX,
-                y: mouseY,
-            });
-            gsap.to(cursorTrail, {
-                duration: 0,
-                x: mouseX,
-                y: mouseY,
-            });
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+    
+            // Verwende die quickSetter für SOFORTIGE Aktualisierung des Dots
+            dotXQuick(mouseX);
+            dotYQuick(mouseY);
+    
+            // Verwende quickTo für die verzögerte Animation des Trails
+            trailXTo(mouseX);
+            trailYTo(mouseY);
         });
-
         // NEU: Verwende GSAP für Ein-/Ausblenden
         document.addEventListener('mouseenter', () => {
             
