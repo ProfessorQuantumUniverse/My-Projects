@@ -38,47 +38,66 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // === CUSTOM COSMIC CURSOR ===
-    const cursorDot = document.querySelector('.cursor-dot');
-    const cursorTrail = document.querySelector('.cursor-trail');
-    let mouseX = 0;
-    let mouseY = 0;
+const cursorDot = document.querySelector('.cursor-dot');
+const cursorTrail = document.querySelector('.cursor-trail');
+let mouseX = 0;
+let mouseY = 0;
 
-    // Initialisiere die Positionen (um Sprung am Anfang zu vermeiden)
-    gsap.set(cursorDot, { xPercent: -50, yPercent: -50 });
-    gsap.set(cursorTrail, { xPercent: -50, yPercent: -50 });
+// Prüfen, ob Elemente gefunden wurden
+if (cursorDot && cursorTrail) {
+    console.log("Cursor elements found!"); // Testausgabe
+
+    // Initialisiere Position UND Sichtbarkeit mit GSAP
+    gsap.set([cursorDot, cursorTrail], {
+        xPercent: -50,
+        yPercent: -50,
+        opacity: 0, // Start unsichtbar
+        scale: 0    // Start klein
+    });
 
     window.addEventListener('mousemove', (e) => {
         mouseX = e.clientX;
         mouseY = e.clientY;
 
-        // Dot folgt sofort
         gsap.to(cursorDot, {
-            duration: 0.2, // Sehr kurze Verzögerung für etwas Glättung
+            duration: 0.2,
             x: mouseX,
             y: mouseY,
             ease: "power1.out"
         });
-
-        // Trail folgt verzögert
         gsap.to(cursorTrail, {
-            duration: 0.6, // Längere Verzögerung für den Schweif-Effekt
+            duration: 0.6,
             x: mouseX,
             y: mouseY,
             ease: "power1.out"
         });
     });
 
-    // Cursor ein-/ausblenden bei Betreten/Verlassen des Fensters
-    document.addEventListener('mouseleave', () => {
-        if (cursorDot) cursorDot.style.opacity = '0';
-        if (cursorTrail) cursorTrail.style.opacity = '0';
-    });
-
+    // NEU: Verwende GSAP für Ein-/Ausblenden
     document.addEventListener('mouseenter', () => {
-        if (cursorDot) cursorDot.style.opacity = '1';
-        if (cursorTrail) cursorTrail.style.opacity = '1';
+        console.log("Mouse enter"); // Testausgabe
+        gsap.to([cursorDot, cursorTrail], {
+            duration: 0.3,
+            opacity: 1, // Setze Opazität auf 1
+            scale: 1,   // Setze Skalierung auf 1
+            ease: "power1.out"
+        });
     });
 
+    document.addEventListener('mouseleave', () => {
+        console.log("Mouse leave"); // Testausgabe
+        gsap.to([cursorDot, cursorTrail], {
+            duration: 0.3,
+            opacity: 0, // Setze Opazität auf 0
+            scale: 0,   // Setze Skalierung auf 0
+            ease: "power1.out"
+        });
+    });
+
+} else {
+    console.error("Custom cursor elements (.cursor-dot or .cursor-trail) not found in HTML!");
+}
+// === END CUSTOM COSMIC CURSOR ===
     // --- Fade-In Effekt beim Scrollen (unverändert) ---
     const observerOptions = { root: null, rootMargin: '0px', threshold: 0.1 };
     const observerCallback = (entries, observer) => {
