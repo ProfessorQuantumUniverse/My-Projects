@@ -428,6 +428,36 @@ button:hover ~ .cursor-trail {
     font-family: var(--font-secondary); /* Space Mono für Footer */
 }
 
+#background-controls {
+    position: fixed; /* Oder absolute, je nach Platzierung */
+    bottom: 20px;
+    right: 20px;
+    z-index: 100; /* Über den meisten Inhalten */
+    display: flex;
+    gap: 10px;
+    background-color: rgba(13, 17, 23, 0.7); /* Hintergrundfarbe wie bg-medium */
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid var(--color-border, #30363d);
+}
+
+#background-controls button {
+    background-color: var(--color-bg-light, #161b22);
+    color: var(--color-text-secondary, #8b949e);
+    border: 1px solid var(--color-border, #30363d);
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: var(--font-secondary, monospace);
+    font-size: 0.8rem;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+#background-controls button:hover {
+    background-color: var(--color-border, #30363d);
+    color: var(--color-text-primary, #c9d1d9);
+}
+
 /* Fade-In Animationen */
 .fade-in {
     opacity: 0;
