@@ -1,0 +1,124 @@
+[
+  {
+    "image": "images/Cavendish.png",
+    "imageAlt": "Vorschau der interaktiven Rechners für eine Gravitationsdrehwaage",
+    "title": "Interactive calculator for a gravitational rotary scale.",
+    "description": "Interactive calculator, as a webapp in HTML, with which you can calculate the gravitational constant G using a gravitational torsion balance.",
+    "tags": ["Physics", "Calculator", "Astronomy", "Web App", "HTML"],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/Gravity-Calculator/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Gravity-Calculator",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/matrix.png",
+    "imageAlt": "Vorschau der LED Matrix Helper Web App mit Pixel-Editor",
+    "title": "LedMatrix Tool WebApp",
+    "description": "WebApp with which you can easily create images for an LED matrix.",
+    "tags": ["LedMatrix", "WebApp", "HTML", "Tool"],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/Sense-Hub-LED-Matrix-Helper/",
+        "text": "Try online",
+        "icon": "fas fa-chart-line"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Sense-Hub-LED-Matrix-Helper",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/1.jpg",
+    "imageAlt": "Vorschau der Phantasialand Waiting Times Android App",
+    "title": "Phantasialand Waiting Times Android App",
+    "description": "Android app to see the waiting times in Phantasialand live, in contrast. to the official app this is much faster, and without tracker!",
+    "tags": ["Phantasialand", "Android", "Kotlin", "Better then original"],
+    "links": [
+      {
+        "url": "https://f-droid.org/packages/com.quantum_prof.phantalandwaittimes/",
+        "text": "F-Droid",
+        "icon": "fas fa-book-open"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Phantasialand-Waitingtimes-App",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/sim.png",
+    "imageAlt": "Vorschau des Funny Hacking Simulators",
+    "title": "Funny Hacking Simulator",
+    "description": "An HTML WebApp that recreates a hacking interface",
+    "tags": ["Simulator", "HTML", "Interface", "Hacking"],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/HTML-Hacking-Simulator/",
+        "text": "Test Online",
+        "icon": "fas fa-book-open"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/HTML-Hacking-Simulator/",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/search-cool-webapps-glide-page-1024x768desktop-ab4db8.png",
+    "imageAlt": "Vorschau der Useful web pages collection",
+    "title": "Useful web pages collection",
+    "description": "A curated list of useful and funny WebApps or pages. With many search and filter functions.",
+    "tags": ["WebApps", "HTML", "Searchengine", "Useful Tools, Websites and WebApps."],
+    "links": [
+      {
+        "url": "https://search-cool-webapps.glide.page/",
+        "text": "Test Online",
+        "icon": "fas fa-book-open"
+      }
+    ]
+  },
+  {
+    "image": "images/search-cool-webapps-glide-page-1024x768desktop-ab4db8.png",
+    "imageAlt": "Vorschau von Linkmem",
+    "title": "Linkmem",
+    "description": "A Tool that let you save Links! Simple and sorted by Projects. Available on Windows.",
+    "tags": ["Windows", "Python", "Links", "Simple"],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Linkmem",
+        "text": "Download!",
+        "icon": "fas fa-book-open"
+      }
+    ]
+  },
+  {
+    "image": "images/search-cool-webapps-glide-page-1024x768desktop-ab4db8.png",
+    "imageAlt": "Vorschau von Search Cool WebApps V2",
+    "title": "Search Cool WebApps V2!",
+    "description": "More functional version 2!",
+    "tags": ["WebApp", "HTML", "DB", "CSV"],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/Cool-WebApp-Searchengine/",
+        "text": "Open!",
+        "icon": "fas fa-book-open"
+      }
+    ]
+  }
+]
