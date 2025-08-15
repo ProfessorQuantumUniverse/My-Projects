@@ -1,10 +1,40 @@
 [
   {
+    "image": "images/placeholder.png",
+    "imageAlt": "hmmm",
+    "title": "Test",
+    "description": "testyyyyy",
+    "tags": [
+      "Hi!",
+      "Moin!",
+      ""
+    ],
+    "links": [
+      {
+        "url": "https://google.com",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.io",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
     "image": "images/Cavendish.png",
     "imageAlt": "Vorschau der interaktiven Rechners für eine Gravitationsdrehwaage",
     "title": "Interactive calculator for a gravitational rotary scale.",
     "description": "Interactive calculator, as a webapp in HTML, with which you can calculate the gravitational constant G using a gravitational torsion balance.",
-    "tags": ["Physics", "Calculator", "Astronomy", "Web App", "HTML"],
+    "tags": [
+      "Physics",
+      "Calculator",
+      "Astronomy",
+      "Web App",
+      "HTML"
+    ],
     "links": [
       {
         "url": "https://professorquantumuniverse.github.io/Gravity-Calculator/",
@@ -24,7 +54,12 @@
     "imageAlt": "Vorschau der LED Matrix Helper Web App mit Pixel-Editor",
     "title": "LedMatrix Tool WebApp",
     "description": "WebApp with which you can easily create images for an LED matrix.",
-    "tags": ["LedMatrix", "WebApp", "HTML", "Tool"],
+    "tags": [
+      "LedMatrix",
+      "WebApp",
+      "HTML",
+      "Tool"
+    ],
     "links": [
       {
         "url": "https://professorquantumuniverse.github.io/Sense-Hub-LED-Matrix-Helper/",
@@ -44,7 +79,12 @@
     "imageAlt": "Vorschau der Phantasialand Waiting Times Android App",
     "title": "Phantasialand Waiting Times Android App",
     "description": "Android app to see the waiting times in Phantasialand live, in contrast. to the official app this is much faster, and without tracker!",
-    "tags": ["Phantasialand", "Android", "Kotlin", "Better then original"],
+    "tags": [
+      "Phantasialand",
+      "Android",
+      "Kotlin",
+      "Better then original"
+    ],
     "links": [
       {
         "url": "https://f-droid.org/packages/com.quantum_prof.phantalandwaittimes/",
@@ -64,7 +104,12 @@
     "imageAlt": "Vorschau des Funny Hacking Simulators",
     "title": "Funny Hacking Simulator",
     "description": "An HTML WebApp that recreates a hacking interface",
-    "tags": ["Simulator", "HTML", "Interface", "Hacking"],
+    "tags": [
+      "Simulator",
+      "HTML",
+      "Interface",
+      "Hacking"
+    ],
     "links": [
       {
         "url": "https://professorquantumuniverse.github.io/HTML-Hacking-Simulator/",
@@ -84,7 +129,12 @@
     "imageAlt": "Vorschau der Useful web pages collection",
     "title": "Useful web pages collection",
     "description": "A curated list of useful and funny WebApps or pages. With many search and filter functions.",
-    "tags": ["WebApps", "HTML", "Searchengine", "Useful Tools, Websites and WebApps."],
+    "tags": [
+      "WebApps",
+      "HTML",
+      "Searchengine",
+      "Useful Tools, Websites and WebApps."
+    ],
     "links": [
       {
         "url": "https://search-cool-webapps.glide.page/",
@@ -98,7 +148,12 @@
     "imageAlt": "Vorschau von Linkmem",
     "title": "Linkmem",
     "description": "A Tool that let you save Links! Simple and sorted by Projects. Available on Windows.",
-    "tags": ["Windows", "Python", "Links", "Simple"],
+    "tags": [
+      "Windows",
+      "Python",
+      "Links",
+      "Simple"
+    ],
     "links": [
       {
         "url": "https://github.com/ProfessorQuantumUniverse/Linkmem",
@@ -112,7 +167,12 @@
     "imageAlt": "Vorschau von Search Cool WebApps V2",
     "title": "Search Cool WebApps V2!",
     "description": "More functional version 2!",
-    "tags": ["WebApp", "HTML", "DB", "CSV"],
+    "tags": [
+      "WebApp",
+      "HTML",
+      "DB",
+      "CSV"
+    ],
     "links": [
       {
         "url": "https://professorquantumuniverse.github.io/Cool-WebApp-Searchengine/",
