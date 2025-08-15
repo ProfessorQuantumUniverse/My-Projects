@@ -1,7 +1,70 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const scrollObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { root: null, rootMargin: '0px', threshold: 0.1 });
+
+    function observeFadeInElements() {
+        const fadeElements = document.querySelectorAll('.fade-in-scroll');
+        fadeElements.forEach(el => scrollObserver.observe(el));
+    }
+
+    async function loadProjects() {
+        try {
+            const response = await fetch('projects.json');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const projects = await response.json();
+            const grid = document.querySelector('.projekt-grid');
+            if (!grid) {
+                console.error('Projekt-Grid nicht gefunden.');
+                return;
+            }
+
+            projects.forEach(project => {
+                const card = document.createElement('div');
+                card.className = 'projekt-karte fade-in-scroll';
+
+                let linksHTML = '';
+                project.links.forEach(link => {
+                    linksHTML += `<a href="${link.url}" target="_blank" class="projekt-button ${link.class || ''}">${link.text}<i class="${link.icon}"></i></a>`;
+                });
+
+                let tagsHTML = '';
+                project.tags.forEach(tag => {
+                    tagsHTML += `<span>${tag}</span>`;
+                });
+
+                card.innerHTML = `
+                    <img src="${project.image}" alt="${project.imageAlt}" class="projekt-bild" loading="lazy">
+                    <div class="projekt-inhalt">
+                        <h3>${project.title}</h3>
+                        <p>${project.description}</p>
+                        <div class="projekt-tags">${tagsHTML}</div>
+                        <div class="projekt-links">${linksHTML}</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            // Re-initialize scroll observer for newly added elements
+            observeFadeInElements();
+
+        } catch (error) {
+            console.error('Fehler beim Laden der Projekte:', error);
+        }
+    }
+
+    loadProjects();
+    observeFadeInElements(); // Observe existing elements on initial load
 
     // --- Partikel Effekt Initialisierung (Kosmos/Sterne Look) ---
-// === PARTICLES.JS INIT & CONTROLS ===
+    // === PARTICLES.JS INIT & CONTROLS ===
 
 // Speichere deine Standard-Konfiguration
 const particleConfig = {
@@ -149,19 +212,7 @@ if (controlsContainer) {
         console.error("Custom cursor elements (.cursor-dot or .cursor-trail) not found in HTML!");
     }
     // === END CUSTOM COSMIC CURSOR ===
-    // --- Fade-In Effekt beim Scrollen (unverändert) ---
-    const observerOptions = { root: null, rootMargin: '0px', threshold: 0.1 };
-    const observerCallback = (entries, observer) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('visible');
-                observer.unobserve(entry.target);
-            }
-        });
-    };
-    const scrollObserver = new IntersectionObserver(observerCallback, observerOptions);
-    const fadeElements = document.querySelectorAll('.fade-in-scroll');
-    fadeElements.forEach(el => scrollObserver.observe(el));
+    // --- Fade-In Effekt wird jetzt durch observeFadeInElements() gehandhabt ---
 
     // --- Easter Egg: Konami Code (Text angepasst) ---
     const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
