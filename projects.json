@@ -1,29 +1,5 @@
 [
   {
-    "image": "images/placeholder.png",
-    "imageAlt": "hmmm",
-    "title": "Test",
-    "description": "testyyyyy",
-    "tags": [
-      "Hi!",
-      "Moin!",
-      ""
-    ],
-    "links": [
-      {
-        "url": "https://google.com",
-        "text": "Try Online",
-        "icon": "fas fa-rocket"
-      },
-      {
-        "url": "https://github.io",
-        "text": "Source Code",
-        "icon": "fab fa-github",
-        "class": "github"
-      }
-    ]
-  },
-  {
     "image": "images/Cavendish.png",
     "imageAlt": "Vorschau der interaktiven Rechners für eine Gravitationsdrehwaage",
     "title": "Interactive calculator for a gravitational rotary scale.",
