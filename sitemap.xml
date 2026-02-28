@@ -1,13 +1,80 @@
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
-<!--  created with Free Online Sitemap Generator www.xml-sitemaps.com  -->
-<url>
-<loc>https://professorquantumuniverse.github.io/My-Projects/</loc>
-<lastmod>2025-04-17T17:05:58+00:00</lastmod>
-<priority>1.00</priority>
-</url>
-<url>
-<loc>https://professorquantumuniverse.github.io/My-Projects/impressum.html</loc>
-<lastmod>2025-04-17T17:05:58+00:00</lastmod>
-<priority>0.50</priority>
-</url>
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://professorquantumuniverse.github.io/HTML-Hacking-Simulator/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/Gravity-Calculator/</loc>
+  </url>
+  <url>
+    <loc>http://professorquantumuniverse.github.io/NoS/</loc>
+  </url>
+
+  <url>
+    <loc>https://professorquantumuniverse.github.io/QR-Stream/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/Markdown.Flow/</loc>
+  </url>
+  <url>
+    <loc>http://professorquantumuniverse.github.io/Fastlane-Checker/</loc>
+  </url>
+
+  <url>
+    <loc>https://professorquantumuniverse.github.io/HQAstroCam/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/SV/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/3D-Print-Hub/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/AuroraCycles/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/Gitcademy/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/RigolManual/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/AggressiveChristmas/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/livingwebsite/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/Cool-WebApp-Searchengine/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/ProjectExperience/</loc>
+  </url>
+  <url>
+    <loc>http://professorquantumuniverse.github.io/Sense-Hub-LED-Matrix-Helper/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/SpaceStuff/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/My-Project-Universe/</loc>
+  </url>
+  <url>
+    <loc>http://privacy.quantumuniverse.me/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/My-Projects/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/AstroClub-Planetenquiz/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/the-wisdom-of-Einstein/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/interstellar/</loc>
+  </url>
+  <url>
+    <loc>https://professorquantumuniverse.github.io/Minion-World/</loc>
+  </url>
 </urlset>
