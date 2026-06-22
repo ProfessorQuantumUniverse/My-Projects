@@ -156,5 +156,732 @@
         "icon": "fas fa-book-open"
       }
     ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/reReminder",
+    "imageAlt": "Vorschau der reReminder Android App",
+    "title": "reReminder",
+    "description": "The ultimate recurring reminder app for Android. Set intervals, enable Text-to-Speech, customize vibration and never lose track of time again. FOSS, lightweight and privacy-first.",
+    "tags": [
+      "Android",
+      "Kotlin",
+      "FOSS",
+      "Reminder",
+      "TTS"
+    ],
+    "links": [
+      {
+        "url": "https://f-droid.org/packages/com.olaf.rereminder/",
+        "text": "F-Droid",
+        "icon": "fab fa-android"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/reReminder",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/fotobox.png",
+    "imageAlt": "Vorschau der Fotobox Raspberry Pi Software",
+    "title": "Fotobox",
+    "description": "The only real Fotobox (photo booth) software to run on a Raspberry Pi. Live preview, countdown, QR sharing via hotspot or Nextcloud and a polished kiosk UI.",
+    "tags": [
+      "Raspberry Pi",
+      "Python",
+      "Photo Booth",
+      "Event"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Fotobox",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/hqastrocam.png",
+    "imageAlt": "Vorschau des HQAstroCam Astrofotografie-Projekts",
+    "title": "HQAstroCam",
+    "description": "Turn your Raspberry Pi into a high-performance, standalone astrophotography rig! Built around the Pi HQ Camera and picamera2 for capturing the night sky.",
+    "tags": [
+      "Astrophotography",
+      "Raspberry Pi",
+      "Python",
+      "Astronomy",
+      "picamera2"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/HQAstroCam/",
+        "text": "Project Page",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/HQAstroCam",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/openslideshow.jpg",
+    "imageAlt": "Vorschau der openSlideShow Präsentations-Software",
+    "title": "openSlideShow",
+    "description": "Dynamic, live-controllable presentation software for events. Dual-monitor, Ken Burns effect, randomized transitions and text overlays — all operable in real time.",
+    "tags": [
+      "JavaScript",
+      "Presentation",
+      "Event",
+      "Dual-Monitor"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/openSlideShow",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/vtscan.png",
+    "imageAlt": "Vorschau des VTScan VirusTotal Android Clients",
+    "title": "VTScan",
+    "description": "A nice VirusTotal Android client to quickly scan apps, files and links for malware right from your phone.",
+    "tags": [
+      "Android",
+      "Kotlin",
+      "Security",
+      "VirusTotal"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/VTScan",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-gitcademy.png",
+    "imageAlt": "Vorschau der Gitcademy Lernplattform",
+    "title": "Gitcademy",
+    "description": "The beginning of a free online academy to learn Git — interactive lessons that take you from your first commit to confident version control.",
+    "tags": [
+      "JavaScript",
+      "Education",
+      "Git",
+      "Web App"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/Gitcademy/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Gitcademy",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-qr-stream.png",
+    "imageAlt": "Vorschau der QR-Stream WebApp",
+    "title": "QR-Stream",
+    "description": "Air-gapped data transmission tool using animated QR & Data Matrix streams. Securely transfer files or text between devices via camera — no Wi-Fi, Bluetooth or internet required.",
+    "tags": [
+      "HTML",
+      "Security",
+      "QR Code",
+      "Air-Gap"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/QR-Stream/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/QR-Stream",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-markdownflow.png",
+    "imageAlt": "Vorschau des Markdown.Flow Konverters",
+    "title": "Markdown.Flow",
+    "description": "A beautiful Markdown to PDF converter that turns plain text into clean, well-formatted documents right in your browser.",
+    "tags": [
+      "Markdown",
+      "PDF",
+      "Web App",
+      "Tool"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/Markdown.Flow/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Markdown.Flow",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/CryptMail",
+    "imageAlt": "Vorschau der CryptMail Chrome Extension",
+    "title": "CryptMail",
+    "description": "A Chrome extension for sending and receiving multi-layer encrypted emails through Gmail — privacy for your inbox without leaving the web client.",
+    "tags": [
+      "JavaScript",
+      "Chrome Extension",
+      "Encryption",
+      "Gmail"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/CryptMail",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/ChronoTime",
+    "imageAlt": "Vorschau der ChronoTime Android Uhr-App",
+    "title": "ChronoTime",
+    "description": "A next-gen Android clock app built with a \"Liquid Glass\" aesthetic and AGSL shaders. Experience time through 8 unique visualizations — from the Berlin Clock and Binary to Unix Epoch and Sand/Water flows.",
+    "tags": [
+      "Android",
+      "Kotlin",
+      "AGSL Shaders",
+      "Clock"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/ChronoTime",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/Europapark-Waitingtimes-App",
+    "imageAlt": "Vorschau der Europapark Waiting Times App",
+    "title": "Europapark Waiting Times App",
+    "description": "A small but nice app to quickly check the waiting times of the attractions in Europapark Rust. Faster and smoother than the official app.",
+    "tags": [
+      "Android",
+      "Kotlin",
+      "Europapark",
+      "Better then original"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Europapark-Waitingtimes-App",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/Gsearch_14",
+    "imageAlt": "Vorschau von Gsearch_14",
+    "title": "Gsearch_14",
+    "description": "Hate seeing AI Overviews in Google Search? Here you go! An Android tool that gives you back a cleaner, AI-free Google search experience.",
+    "tags": [
+      "Android",
+      "Kotlin",
+      "Google",
+      "Tool"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/Gsearch_14",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/GoogleMods",
+    "imageAlt": "Vorschau von GoogleMods",
+    "title": "GoogleMods",
+    "description": "A modular userscript framework for Google. It bundles many small — from funny to genuinely helpful — tools that apply to google.com.",
+    "tags": [
+      "JavaScript",
+      "Userscript",
+      "Google",
+      "Framework"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/GoogleMods",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/EduNew9",
+    "imageAlt": "Vorschau der EduNew9 Edupage App",
+    "title": "EduNew9",
+    "description": "Version 2 of my custom Edupage app — a faster, cleaner Android client for the Edupage school platform.",
+    "tags": [
+      "Android",
+      "Kotlin",
+      "Edupage",
+      "School"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/EduNew9",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-ffm-elections.png",
+    "imageAlt": "Vorschau des FFM Elections Dashboards",
+    "title": "FFM Elections Dashboard",
+    "description": "A small analytics site to study the results of the last local elections in Frankfurt am Main, with interactive charts and breakdowns.",
+    "tags": [
+      "JavaScript",
+      "Data Analytics",
+      "Elections",
+      "Dashboard"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/FFM-Elections-Dashboard/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/FFM-Elections-Dashboard",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/JuFoAnalytics",
+    "imageAlt": "Vorschau der JuFoAnalytics Seite",
+    "title": "JuFoAnalytics",
+    "description": "A small analytics site to study trends in the previous projects of Jugend Forscht, built with Python and Streamlit.",
+    "tags": [
+      "Python",
+      "Streamlit",
+      "Data Analytics",
+      "Jugend Forscht"
+    ],
+    "links": [
+      {
+        "url": "https://jufoanalytics-main.streamlit.app/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/JuFoAnalytics",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-astroclub-quiz.png",
+    "imageAlt": "Vorschau des AstroClub Planetenquiz",
+    "title": "AstroClub Planetenquiz",
+    "description": "Explore the universe and enjoy the quiz wherever you meet the AstroClub of the physical society in and around Frankfurt.",
+    "tags": [
+      "Web App",
+      "Astronomy",
+      "Quiz",
+      "Education"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/AstroClub-Planetenquiz/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/AstroClub-Planetenquiz",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-tectonicsmap.png",
+    "imageAlt": "Vorschau der TectonicsMap",
+    "title": "TectonicsMap",
+    "description": "A custom-made map of the tectonic plates of planet Earth, made in QGIS with dark mode in mind.",
+    "tags": [
+      "Web App",
+      "QGIS",
+      "Map",
+      "Geology"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/TectonicsMap/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/TectonicsMap",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-indexterminal.png",
+    "imageAlt": "Vorschau des INDEXterminal",
+    "title": "INDEXterminal",
+    "description": "If you lost the overview over all the web pages I published (like myself), here is a terminal-styled overview for you!",
+    "tags": [
+      "JavaScript",
+      "Web App",
+      "Terminal",
+      "Index"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/INDEXterminal/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/INDEXterminal",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-nos.png",
+    "imageAlt": "Vorschau der Night of Science Voting App",
+    "title": "Night of Science Voting",
+    "description": "A Night of Science voting app for letting the audience vote live during the science event.",
+    "tags": [
+      "JavaScript",
+      "Web App",
+      "Voting",
+      "Science"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/NoS/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/NoS",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-sv.png",
+    "imageAlt": "Vorschau des SV Protokoll-Generators",
+    "title": "SV Protocol Generator",
+    "description": "Generate protocols of the meetings of the student council (SV) at FWS Frankfurt with ease.",
+    "tags": [
+      "Web App",
+      "Tool",
+      "School",
+      "Productivity"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/SV/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/SV",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-projectexperience.png",
+    "imageAlt": "Vorschau der Project Experience Seite",
+    "title": "Project Experience",
+    "description": "The online presence of my biggest wood project yet. Enjoy the journey of building it!",
+    "tags": [
+      "Web App",
+      "Woodworking",
+      "Maker",
+      "Showcase"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/ProjectExperience/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/ProjectExperience",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-3dprinthub.png",
+    "imageAlt": "Vorschau der 3D-Print-Hub Homepage",
+    "title": "3D-Print-Hub",
+    "description": "The homepage for 3D-Print-Hub™ — my hub for everything around 3D printing.",
+    "tags": [
+      "Web App",
+      "3D Printing",
+      "Homepage",
+      "Maker"
+    ],
+    "links": [
+      {
+        "url": "http://3d-print-hub.quantumuniverse.me/",
+        "text": "Visit Site",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/3D-Print-Hub",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-rigolmanual.png",
+    "imageAlt": "Vorschau des Rigol Webmanuals",
+    "title": "Rigol Web Manual",
+    "description": "A web manual for the Rigol DS1202Z-E digital storage oscilloscope — handy reference right in your browser.",
+    "tags": [
+      "Web App",
+      "HTML",
+      "Manual",
+      "Electronics"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/RigolManual/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/RigolManual",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-linux-update-tool.png",
+    "imageAlt": "Vorschau des General Linux Update Tools",
+    "title": "General Linux Update Tool",
+    "description": "A handy web-based helper around keeping general Linux systems up to date.",
+    "tags": [
+      "Web App",
+      "Linux",
+      "Tool",
+      "Sysadmin"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/General-Linux-Update-Tool/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/General-Linux-Update-Tool",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "images/shot-livingwebsite.png",
+    "imageAlt": "Vorschau der livingwebsite",
+    "title": "The Living Website",
+    "description": "\"Hi, I'm the description of this website, I'm alive and so is the project I should initially have described.\" A playful, self-aware web experiment.",
+    "tags": [
+      "Web App",
+      "HTML",
+      "Experiment",
+      "Fun"
+    ],
+    "links": [
+      {
+        "url": "https://professorquantumuniverse.github.io/livingwebsite/",
+        "text": "Try Online",
+        "icon": "fas fa-rocket"
+      },
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/livingwebsite",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/fourier-powerpoint",
+    "imageAlt": "Vorschau des Fourier Manim Projekts",
+    "title": "Fourier Animations (Manim)",
+    "description": "Manim animation files for a very good presentation about Joseph Fourier and the math behind his transforms.",
+    "tags": [
+      "Python",
+      "Manim",
+      "Animation",
+      "Math"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/fourier-powerpoint",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/openCharges",
+    "imageAlt": "Vorschau des openCharges Projekts",
+    "title": "openCharges",
+    "description": "WIP — a stylish charging station for everything from phones to smart watches, created from the fusion of wood and electronics.",
+    "tags": [
+      "C++",
+      "Hardware",
+      "Maker",
+      "WIP"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/openCharges",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/MainBoardServer",
+    "imageAlt": "Vorschau des MainBoardServer Homelab-Projekts",
+    "title": "MainBoardServer",
+    "description": "Building a small homelab with two laptop motherboards and a Raspberry Pi — documenting the journey of turning spare hardware into a server.",
+    "tags": [
+      "Homelab",
+      "Server",
+      "Raspberry Pi",
+      "Hardware"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/MainBoardServer",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/ai_automation_suggester_stripped",
+    "imageAlt": "Vorschau der AI Automation Suggester Integration",
+    "title": "AI Automation Suggester (stripped)",
+    "description": "A custom Home Assistant integration that automatically scans your entities, detects new devices and writes a detailed prompt for an AI to suggest automations.",
+    "tags": [
+      "Home Assistant",
+      "Python",
+      "AI",
+      "Fork"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/ai_automation_suggester_stripped",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/ha_tuya_ble_irrigation",
+    "imageAlt": "Vorschau der Tuya BLE Irrigation Integration",
+    "title": "HA Tuya BLE Irrigation",
+    "description": "Home Assistant support for Tuya BLE devices, consolidating active forks — adapted for a BLE irrigation computer.",
+    "tags": [
+      "Home Assistant",
+      "Python",
+      "Tuya BLE",
+      "Fork"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/ha_tuya_ble_irrigation",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
+  },
+  {
+    "image": "https://opengraph.githubassets.com/1/ProfessorQuantumUniverse/cremalink-ha",
+    "imageAlt": "Vorschau der CremaLink Home Assistant Integration",
+    "title": "CremaLink HA",
+    "description": "Use your coffee machine with Home Assistant. A fork focused on fixing bugs and keeping the integration alive.",
+    "tags": [
+      "Home Assistant",
+      "Python",
+      "Coffee",
+      "Fork"
+    ],
+    "links": [
+      {
+        "url": "https://github.com/ProfessorQuantumUniverse/cremalink-ha",
+        "text": "Source Code",
+        "icon": "fab fa-github",
+        "class": "github"
+      }
+    ]
   }
 ]
