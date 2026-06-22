@@ -6,6 +6,7 @@
     <title>Lorenzo Bay-Müller - My personal site. Universe. Physics. Code. Science.</title>
     <meta name="description" content="Portfolio of Lorenzo Bay-Müller, a digital explorer, inventor,  scientist who connects code, physics, and the universe. Discover projects and explorations.">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="universe.css">
     <meta name="keywords" content="Lorenzo Bay-Müller, Portfolio, Webdevelopment, Python, JavaScript, Physics, Astrophysics, 3D-Printing, Drone, Science, Code, Universe">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -92,9 +93,40 @@
              </div>
          </div>
      </section>
- 
+
+     <!-- Gateway / Interstellar Fork Sektion -->
+     <section id="gateway" class="gateway-section">
+         <div class="gateway-rings" aria-hidden="true">
+             <span class="g-ring g-ring-1"></span>
+             <span class="g-ring g-ring-2"></span>
+             <span class="g-ring g-ring-3"></span>
+             <span class="g-core"></span>
+         </div>
+         <div class="gateway-content fade-in-scroll">
+             <p class="gateway-kicker">// Choose your trajectory</p>
+             <h2 class="gateway-title">Two ways through the cosmos</h2>
+             <p class="gateway-sub">Dive into an interactive 3D black-hole experience — or take the classic route straight to the projects.</p>
+             <div class="gateway-buttons">
+                 <button type="button" id="enter-universe-btn" class="gateway-btn gateway-btn--primary">
+                     <span class="gw-label">Enter My Universe</span>
+                     <span class="gw-desc">Interactive 3D &middot; WebGL</span>
+                     <i class="fas fa-meteor" aria-hidden="true"></i>
+                 </button>
+                 <button type="button" id="go-projects-btn" class="gateway-btn gateway-btn--ghost">
+                     <span class="gw-label">Go to My Projects</span>
+                     <span class="gw-desc">Classic cards &middot; Fast &amp; accessible</span>
+                     <i class="fas fa-layer-group" aria-hidden="true"></i>
+                 </button>
+             </div>
+             <p class="gateway-hint" id="gateway-hint"></p>
+         </div>
+         <div class="scroll-down-indicator gateway-scroll" aria-hidden="true">
+             <i class="fas fa-angle-double-down"></i>
+         </div>
+     </section>
+
      <!-- Projekte Sektion -->
-     
+
      <section id="explorations" class="content-section">
          <h2 class="section-title">Explorationen & Projekte</h2>
          <div class="projekt-grid">
@@ -128,10 +160,92 @@
 
     <!-- Easter Egg Overlay (HTML wird in JS generiert) -->
 
+    <!-- Warp-Transition Canvas (Sterne ziehen sich zu Linien) -->
+    <canvas id="warp-canvas" aria-hidden="true"></canvas>
+
+    <!-- 3D Universe Overlay (Three.js Schwarzes Loch) -->
+    <div id="universe-overlay" aria-hidden="true" role="dialog" aria-label="Interactive 3D project universe">
+        <canvas id="universe-canvas"></canvas>
+
+        <div id="u-loading" class="u-loading">
+            <div class="u-spinner"></div>
+            <span>Bending spacetime&hellip;</span>
+        </div>
+
+        <!-- Control HUD -->
+        <div class="u-hud">
+            <div class="u-hud-brand"><i class="fas fa-meteor" aria-hidden="true"></i> My Universe</div>
+            <div class="u-hud-group">
+                <div class="u-toggle" role="group" aria-label="Camera view">
+                    <button type="button" id="u-view-inside" class="u-toggle-btn is-active" aria-pressed="true">Dome &middot; Inside</button>
+                    <button type="button" id="u-view-outside" class="u-toggle-btn" aria-pressed="false">Outside</button>
+                </div>
+                <button type="button" id="u-mode-classic" class="u-hud-btn"><i class="fas fa-layer-group" aria-hidden="true"></i> <span>Classic Cards</span></button>
+                <button type="button" id="u-back" class="u-hud-btn"><i class="fas fa-arrow-up" aria-hidden="true"></i> <span>Back to top</span></button>
+            </div>
+        </div>
+
+        <div class="u-help" id="u-help">
+            <span><i class="fas fa-arrows-up-down-left-right" aria-hidden="true"></i> Drag to look around</span>
+            <span><i class="fas fa-keyboard" aria-hidden="true"></i> W A S D to fly</span>
+            <span><i class="fas fa-hand-pointer" aria-hidden="true"></i> Hover a card &middot; click to focus</span>
+            <span><i class="fas fa-circle" aria-hidden="true"></i> Click the black hole to exit</span>
+        </div>
+
+        <!-- Detailpanel beim Fokussieren einer Karte -->
+        <aside class="u-detail" id="u-detail" aria-hidden="true">
+            <button type="button" class="u-detail-close" id="u-detail-close" aria-label="Close details">&times;</button>
+            <div class="u-detail-body"><!-- per JS gefüllt --></div>
+        </aside>
+
+        <!-- Supernova-Blitz (Vollbild) -->
+        <div class="u-flash" id="u-flash" aria-hidden="true"></div>
+
+        <!-- Spaghettisierungs-Glitch + Retro-Terminal (Platzhalter) -->
+        <div class="u-glitch" id="u-glitch" aria-hidden="true"></div>
+        <div class="u-terminal" id="u-terminal" aria-hidden="true">
+            <div class="u-terminal-inner">
+                <pre id="u-terminal-text"></pre>
+                <button type="button" id="u-terminal-exit" class="u-hud-btn">&gt; reboot_universe</button>
+            </div>
+        </div>
+    </div>
+
     <!-- JavaScript Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script src="script.js"></script>
+
+    <!-- Three.js (ES-Module via Importmap) + Universe-Logik -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+    <script type="module" src="universe.js"></script>
+
+    <!-- Fallback: falls das 3D-Modul (CDN) nicht lädt, bleiben die Buttons nutzbar -->
+    <script>
+      (function () {
+        function scrollToProjects(e) {
+          if (e) e.preventDefault();
+          var el = document.getElementById('explorations');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            if (window.__universeReady) return; // Modul übernimmt
+            var a = document.getElementById('enter-universe-btn');
+            var b = document.getElementById('go-projects-btn');
+            if (a) a.addEventListener('click', scrollToProjects);
+            if (b) b.addEventListener('click', scrollToProjects);
+          }, 3500);
+        });
+      })();
+    </script>
 </body>
 </html>
