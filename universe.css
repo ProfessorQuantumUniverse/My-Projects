@@ -501,6 +501,135 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
 .u-detail .u-detail-links a.github { color: var(--color-text-secondary); border-color: var(--color-text-secondary); }
 .u-detail .u-detail-links a.github:hover { color: #fff; background: rgba(160, 168, 192, 0.1); }
 
+/* Welt-Panel-Erweiterungen (Planeten / Tech-Brocken) */
+.u-detail-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-secondary);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 10px;
+    opacity: 0.95;
+}
+.u-detail-facts {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+.u-detail-facts li {
+    position: relative;
+    padding-left: 20px;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+.u-detail-facts li::before {
+    content: '◆';
+    position: absolute;
+    left: 0;
+    top: 1px;
+    color: var(--color-accent-primary);
+    font-size: 0.6rem;
+}
+.u-detail-techlinks a { font-size: 0.82rem; padding: 7px 14px; }
+
+/* ----------------------------------------------------------------
+   3b) Schwebende Welt-Labels (Planeten, Tech-Brocken, News-Kometen)
+   ---------------------------------------------------------------- */
+.u-labels {
+    position: absolute;
+    inset: 0;
+    z-index: 11;
+    pointer-events: none;
+    overflow: hidden;
+}
+.u-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    will-change: transform, opacity;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    font-family: var(--font-secondary);
+    background: rgba(8, 11, 22, 0.6);
+    border: 1px solid color-mix(in srgb, var(--accent, #a67cff) 55%, transparent);
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    white-space: nowrap;
+}
+.u-label:hover { background: rgba(13, 17, 32, 0.85); box-shadow: 0 0 18px color-mix(in srgb, var(--accent, #a67cff) 40%, transparent); }
+
+/* Planeten-Label: Name groß, Untertitel klein */
+.u-label-planet {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    border-left: 3px solid var(--accent, #a67cff);
+}
+.u-label-planet i {
+    color: var(--accent, #a67cff);
+    font-size: 0.8rem;
+    margin-bottom: 3px;
+}
+.u-label-planet .u-label-name {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    line-height: 1;
+}
+.u-label-planet .u-label-kind {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-secondary);
+}
+.u-label-planet::after {
+    content: '▶ anfliegen';
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent, #a67cff);
+    margin-top: 3px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.u-label-planet:hover::after { opacity: 0.9; }
+
+/* Tech-Brocken-Label: kompakter Chip */
+.u-label-tech {
+    padding: 4px 11px;
+    border-radius: 13px;
+    font-size: 0.72rem;
+    letter-spacing: 0.5px;
+    color: color-mix(in srgb, var(--accent, #70d6ff) 75%, #fff);
+}
+
+/* News-Komet-Label: leuchtende Schlagzeile */
+.u-label-news {
+    padding: 7px 14px;
+    border-radius: 16px;
+    font-size: 0.78rem;
+    border-color: rgba(255, 224, 160, 0.6);
+    color: #fff2cf;
+    box-shadow: 0 0 22px rgba(255, 220, 140, 0.18);
+    animation: u-news-pulse 2.4s ease-in-out infinite;
+}
+.u-label-news i { color: #ffd27a; margin-right: 5px; }
+@keyframes u-news-pulse {
+    0%, 100% { box-shadow: 0 0 18px rgba(255, 220, 140, 0.16); }
+    50% { box-shadow: 0 0 28px rgba(255, 220, 140, 0.34); }
+}
+
 /* ----------------------------------------------------------------
    4) Responsive & Reduced Motion
    ---------------------------------------------------------------- */
@@ -511,6 +640,17 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
     .u-hud { flex-direction: column; align-items: flex-start; gap: 10px; }
     .u-detail { right: 50%; transform: translate(50%, 0); top: auto; bottom: 70px; width: 92vw; max-height: 56vh; }
     .u-detail.is-open { transform: translate(50%, 0); }
+    .u-label-planet { padding: 6px 11px; }
+    .u-label-planet .u-label-name { font-size: 0.85rem; }
+    .u-label-planet .u-label-kind { font-size: 0.55rem; }
+    .u-label-planet::after { display: none; }
+    .u-label-tech { font-size: 0.62rem; padding: 3px 8px; }
+    .u-label-news { font-size: 0.68rem; padding: 5px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .u-label { transition: none; }
+    .u-label-news { animation: none; }
 }
 
 /* ----------------------------------------------------------------

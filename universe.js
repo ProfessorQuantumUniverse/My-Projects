@@ -33,7 +33,8 @@ const DISK_INNER  = 12.5;
 const DISK_OUTER  = 60;
 const DOME_R      = 104;      // Radius des Karten-Loops (mehr Platz ums große Loch)
 const INSIDE_HOME  = new THREE.Vector3(0, 18, 0);
-const OUTSIDE_HOME = new THREE.Vector3(0, 54, 220);
+// Weiträumiges System -> Kamera erhöht für 3/4-Überblick (Ekliptik als Ellipse sichtbar)
+const OUTSIDE_HOME = new THREE.Vector3(0, 560, 1180);
 
 // Render-Layer: 0 = Hintergrund/Loch/Scheibe (mit Lensing), 1 = Karten
 // (lens-immun, darüber gerendert), 2 = Horizont nur für Verdeckungs-Tiefe
@@ -215,7 +216,7 @@ function drawSpeed(speed) {
   if (!speedCtx) return;
   const W = speedCanvas.width, H = speedCanvas.height;
   speedCtx.clearRect(0, 0, W, H);
-  const k = Math.min(1, Math.max(0, (speed - 42) / (FLY_MAX - 42)));
+  const k = Math.min(1, Math.max(0, (speed - 120) / (FLY_MAX - 120)));
   if (k <= 0.01) return;
   const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -254,7 +255,18 @@ let novaSystem = null;           // aktive Supernova-Partikel
 let comets = [];                 // Sternschnuppen
 let cometTimer = 0;
 let cards = [];
-let orbiters = [];              // zusätzliche Objekte im Orbit (Planeten, Trümmer)
+let planets = [];               // benannte Welten (Origin/Forge/Aether/Nexus)
+let asteroidBelt = null;        // Tech-Stack-Asteroidengürtel (Partikel)
+let eclipticField = null;       // leuchtende Partikel in der Systemebene (Ekliptik)
+let techRocks = [];             // einzelne, anklickbare Tech-Brocken
+let labelLayer = null;          // Container für News-Komet-Schlagzeilen
+let focusedPlanet = null;       // aktuell angeflogene Welt
+let hoveredWorld = null;        // Planet/Brocken unter dem Zeiger
+let newsTimer = 6;              // Countdown bis zum nächsten News-Kometen
+let newsComets = [];            // langsame Kometen mit anklickbarer Schlagzeile
+let newsIdx = 0;                // rotiert durch WORLD.news
+let worldCalm = 0;              // 0 = volle Bewegung, 1 = eingefroren (nah an/auf einem Planeten)
+let flyWarpSpeed = 0;           // treibt die Speed-Streaks während weiter Kamerafahrten (Warp-Gefühl)
 let projects = [];
 let domeAngle = 0;
 let elapsed = 0;                 // Gesamtzeit (für Twinkle/Shader)
@@ -362,21 +374,90 @@ function makeStarLayer(N, rMin, rMax, size, sprite, brightBias) {
   });
   return new THREE.Points(geo, mat);
 }
-function buildStarfield(sprite) {
-  // drei Tiefenschichten -> starker Parallaxe-Effekt beim Fliegen
-  const near = makeStarLayer(1600, 180, 520, 3.4, sprite, 0.45);
-  const mid  = makeStarLayer(3200, 520, 1200, 2.1, sprite, 0.35);
-  const far  = makeStarLayer(4200, 1200, 2600, 1.3, sprite, 0.28);
-  starLayers = [near, mid, far];
-  starLayers.forEach(l => scene.add(l));
-  starfield = mid; // Kompatibilität
+/* ---- statische Sternen-Cubemap backen (echter, ruhiger Hintergrund) ---- */
+function bakeStarCubemap(size) {
+  const faces = [];
+  // optionaler globaler "Milchstraßen"-Pol, damit die Bänder über die Faces grob zusammenpassen
+  for (let f = 0; f < 6; f++) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    // tiefes Weltraum-Schwarz mit minimalem Blaustich
+    const bg = ctx.createLinearGradient(0, 0, size, size);
+    bg.addColorStop(0, '#03040a');
+    bg.addColorStop(1, '#05050d');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, size, size);
 
-  // helle, individuell funkelnde Sterne (eigener Twinkle-Shader)
-  const N = 180;
+    // ein paar sehr dezente Nebel-Schwaden für Tiefe (additiv, niedrige Deckkraft)
+    ctx.globalCompositeOperation = 'lighter';
+    const nebCols = ['#241a4a', '#15324f', '#3a1f4a', '#102a40'];
+    const nNeb = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < nNeb; i++) {
+      const nx = Math.random() * size, ny = Math.random() * size;
+      const nr = size * (0.18 + Math.random() * 0.28);
+      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+      const col = nebCols[(f + i) % nebCols.length];
+      g.addColorStop(0, col);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.05 + Math.random() * 0.05;
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+    }
+    ctx.globalAlpha = 1;
+
+    // Sternenfeld: viele kleine + wenige helle, farbig gestreut
+    const starCount = Math.floor((size * size) / 1400);
+    for (let i = 0; i < starCount; i++) {
+      const x = Math.random() * size, y = Math.random() * size;
+      const m = Math.random();
+      const radius = m > 0.985 ? 1.6 + Math.random() * 1.8 : m > 0.9 ? 0.9 + Math.random() : 0.3 + Math.random() * 0.6;
+      const pick = Math.random();
+      const col = pick > 0.9 ? '173,214,255' : pick > 0.8 ? '210,190,255' : pick > 0.72 ? '255,228,196' : '255,255,255';
+      const bright = m > 0.985 ? 1.0 : 0.35 + Math.random() * 0.5;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, radius * 2.2);
+      g.addColorStop(0, `rgba(${col},${bright})`);
+      g.addColorStop(0.5, `rgba(${col},${bright * 0.4})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    faces.push(c);
+  }
+  const tex = new THREE.CubeTexture(faces);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function buildStarfield(sprite) {
+  // Echte Milchstraßen-Sternkarte (equirektangular) als Skybox.
+  // Quelle: Solar System Scope (CC BY 4.0) – aus echten Himmelsdurchmusterungen.
+  // Sofort eine prozedurale Cubemap als Fallback, dann weich auf die echte Map wechseln.
+  scene.background = bakeStarCubemap(1024);
+  scene.backgroundIntensity = 1.7;   // die Map ist (realistisch) dunkel -> anheben
+  new THREE.TextureLoader().load(
+    'images/skybox/milkyway_2k.jpg',
+    (tex) => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      scene.background = tex;
+    },
+    undefined,
+    () => { /* Fehler -> prozedurale Cubemap bleibt als Fallback */ }
+  );
+  starLayers = [];        // keine rotierenden Schichten mehr -> Ruhe & Stabilität
+  starfield = null;
+
+  // wenige helle, individuell funkelnde Sterne als lebendige Akzente (weit draußen, statisch)
+  const N = 48;
   const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), ph = new Float32Array(N);
   const tmp = new THREE.Color();
   for (let i = 0; i < N; i++) {
-    const r = 450 + Math.random() * 950;
+    const r = 1600 + Math.random() * 2600;
     const th = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1);
     pos[i * 3] = r * Math.sin(phi) * Math.cos(th);
     pos[i * 3 + 1] = r * Math.cos(phi);
@@ -473,29 +554,105 @@ function updateComets(dt) {
   }
 }
 
+/* ---- News-Komet: langsamer, mit leuchtendem Kopf + anklickbarer Schlagzeile ---- */
+function spawnNewsComet() {
+  if (!WORLD.news.length || !labelLayer) return;
+  const news = WORLD.news[newsIdx % WORLD.news.length];
+  newsIdx++;
+  const SEG = 26;
+  // sanfter Bogen quer durchs Sichtfeld, in mittlerer Tiefe
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const start = new THREE.Vector3(side * 320, 60 + Math.random() * 120, -120 - Math.random() * 160);
+  const dir = new THREE.Vector3(-side, -0.12, 0.18 + Math.random() * 0.1).normalize();
+  const speed = 38 + Math.random() * 14;       // deutlich langsamer -> lesbar/klickbar
+  const pos = new Float32Array(SEG * 3);
+  for (let i = 0; i < SEG; i++) { pos[i * 3] = start.x; pos[i * 3 + 1] = start.y; pos[i * 3 + 2] = start.z; }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xffe6a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const line = new THREE.Line(geo, mat);
+  line.layers.set(LAYER_BG);
+  scene.add(line);
+  // leuchtender Kopf
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(1.1, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xfff0c0 })
+  );
+  head.material.toneMapped = false;
+  scene.add(head);
+  // klickbares HTML-Label
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'u-label u-label-news';
+  el.innerHTML = `<i class="fas fa-star"></i> ${news.text}`;
+  el.addEventListener('click', (e) => { e.stopPropagation(); window.open(news.url, '_blank', 'noopener'); });
+  labelLayer.appendChild(el);
+  newsComets.push({ line, head, headPos: start.clone(), dir, speed, t: 0, life: 16, seg: SEG, el, news });
+}
+const _newsVec = new THREE.Vector3();
+function updateNewsComets(dt) {
+  newsTimer -= dt;
+  if (newsTimer <= 0 && newsComets.length < 1 && cardsRevealed) { spawnNewsComet(); newsTimer = 16 + Math.random() * 10; }
+  const w = window.innerWidth, h = window.innerHeight;
+  const canShow = overlay.classList.contains('is-visible') && !spaghetti && !introActive;
+  for (let i = newsComets.length - 1; i >= 0; i--) {
+    const c = newsComets[i];
+    c.t += dt;
+    c.headPos.addScaledVector(c.dir, c.speed * dt);
+    c.head.position.copy(c.headPos);
+    const arr = c.line.geometry.attributes.position.array;
+    for (let s = c.seg - 1; s > 0; s--) {
+      arr[s * 3] = arr[(s - 1) * 3]; arr[s * 3 + 1] = arr[(s - 1) * 3 + 1]; arr[s * 3 + 2] = arr[(s - 1) * 3 + 2];
+    }
+    arr[0] = c.headPos.x; arr[1] = c.headPos.y; arr[2] = c.headPos.z;
+    c.line.geometry.attributes.position.needsUpdate = true;
+    // weiches Ein-/Ausblenden
+    const fade = Math.min(1, c.t / 1.5) * Math.min(1, (c.life - c.t) / 2.0);
+    c.line.material.opacity = Math.max(0, 0.85 * fade);
+    c.head.material.opacity = fade;
+    // Label an Kopf-Position projizieren
+    _newsVec.copy(c.headPos).project(camera);
+    const behind = _newsVec.z > 1;
+    if (canShow && !behind && Math.abs(_newsVec.x) < 1.1 && Math.abs(_newsVec.y) < 1.1) {
+      const x = (_newsVec.x * 0.5 + 0.5) * w;
+      const y = (-_newsVec.y * 0.5 + 0.5) * h;
+      c.el.style.transform = `translate(-50%, -140%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      c.el.style.opacity = (fade * 0.95).toFixed(2);
+      c.el.style.pointerEvents = fade > 0.5 ? 'auto' : 'none';
+    } else {
+      c.el.style.opacity = '0'; c.el.style.pointerEvents = 'none';
+    }
+    if (c.t >= c.life) {
+      scene.remove(c.line); c.line.geometry.dispose(); c.line.material.dispose();
+      scene.remove(c.head); c.head.geometry.dispose(); c.head.material.dispose();
+      c.el.remove();
+      newsComets.splice(i, 1);
+    }
+  }
+}
+
 /* ---- Nebel: große, sehr dezente, farbige Wolken weit außen ---- */
 function buildNebula() {
   nebula = new THREE.Group();
   const tex = makeNebulaTexture();
-  const colors = ['#3a2d8f', '#2f5fae', '#7a4bd0', '#1f4f8f', '#b5532a', '#5a3fb0', '#244a9a', '#6a3da0'];
-  const COUNT = 18;
+  const colors = ['#3a2d8f', '#2f5fae', '#7a4bd0', '#1f4f8f', '#5a3fb0'];
+  const COUNT = 5;   // wenige, große, weit entfernte Schwaden -> Tiefe ohne Unruhe
   for (let i = 0; i < COUNT; i++) {
-    const baseOpacity = 0.04 + Math.random() * 0.07;
+    const baseOpacity = 0.05 + Math.random() * 0.06;
     const mat = new THREE.MeshBasicMaterial({
       map: tex, color: new THREE.Color(colors[i % colors.length]), transparent: true,
       opacity: baseOpacity, blending: THREE.AdditiveBlending,
       depthWrite: false, side: THREE.DoubleSide,
     });
     mat.toneMapped = false;
-    const size = 130 + Math.random() * 280;
+    const size = 700 + Math.random() * 900;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
     m.userData.baseOpacity = baseOpacity;
-    // im Volumen verteilen (auch in Bandnähe -> man fliegt hindurch)
-    const r = 90 + Math.random() * 540;
+    // weit draußen verteilen (jenseits der Planetenbahnen) -> reiner Hintergrund
+    const r = 1400 + Math.random() * 1600;
     const th = Math.random() * Math.PI * 2;
-    m.position.set(Math.cos(th) * r, (Math.random() - 0.5) * 320, Math.sin(th) * r);
+    m.position.set(Math.cos(th) * r, (Math.random() - 0.5) * 1200, Math.sin(th) * r);
     m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    m.userData.spin = (Math.random() - 0.5) * 0.03;
     nebula.add(m);
   }
   scene.add(nebula);
@@ -597,56 +754,477 @@ function buildBlackHole() {
   scene.add(photonRing);
 }
 
-/* ---- Zusätzliche Orbit-Elemente: Trümmerring + Planeten ---- */
-function buildOrbiters(sprite) {
-  // (a) geneigter Trümmerring (feine Partikel)
-  const N = 1200;
+/* ================================================================
+   WELT-SYSTEM: benannte Planeten, Monde, Tech-Asteroidengürtel
+   ----------------------------------------------------------------
+   Jeder Himmelskörper trägt einen Aspekt des Portfolios. Die
+   Projektkarten bleiben am Schwarzen Loch — die Welt drumherum
+   erzählt, WER hinter den Projekten steckt.
+   ================================================================ */
+const WORLD = {
+  planets: [
+    {
+      id: 'origin', name: 'Origin', kind: 'Felswelt · gezeitengebunden',
+      type: 'rocky', orbitR: 220, orbitY: 14, size: 7.0, speed: 0.034, inc: 0.14, tilt: 0.3,
+      colA: '#3a2418', colB: '#b5703a', colC: '#ffd9a0', glow: '#ffb060', glowAmt: 0.0,
+      icon: 'fa-user-astronaut', accent: '#ffa94d',
+      title: 'Origin — Wer steckt dahinter?',
+      lead: 'Die innerste Welt, eine Seite ewig dem Licht zugewandt.',
+      facts: [
+        'Lorenzo Bay-Müller — Maker, Tüftler & Physik-Begeisterter',
+        'Zuhause in Frankfurt am Main',
+        'Aktiv im AstroClub der Physikalischen Gesellschaft',
+        'Jugend-Forscht-Teilnehmer',
+        'Leitsatz: FOSS first. Privacy always.',
+      ],
+      moons: [
+        { name: 'Curriculum', size: 1.6, r: 16, speed: 0.26, color: '#ffcf99' },
+      ],
+    },
+    {
+      id: 'forge', name: 'Forge', kind: 'Vulkanwelt · aktive Oberfläche',
+      type: 'lava', orbitR: 380, orbitY: -34, size: 11.0, speed: 0.022, inc: -0.18, tilt: 0.5,
+      colA: '#1c0a06', colB: '#5a1505', colC: '#ff5a1e', glow: '#ff8a2a', glowAmt: 0.0,
+      icon: 'fa-hammer', accent: '#ff6b6b',
+      title: 'Forge — Was entsteht mit den Händen?',
+      lead: 'Glühende Risse, sprühende Funken — die Maker-Welt.',
+      facts: [
+        'Hardware, 3D-Druck & Holz — wo Bits auf Atome treffen.',
+      ],
+      links: [
+        { url: 'https://github.com/ProfessorQuantumUniverse/Fotobox', text: 'Fotobox', icon: 'fas fa-camera' },
+        { url: 'http://3d-print-hub.quantumuniverse.me/', text: '3D-Print-Hub', icon: 'fas fa-cube' },
+        { url: 'https://professorquantumuniverse.github.io/HQAstroCam/', text: 'HQAstroCam', icon: 'fas fa-meteor' },
+        { url: 'https://github.com/ProfessorQuantumUniverse/MainBoardServer', text: 'MainBoardServer', icon: 'fas fa-server' },
+        { url: 'https://professorquantumuniverse.github.io/ProjectExperience/', text: 'Project Experience', icon: 'fas fa-tree' },
+      ],
+      moons: [
+        { name: 'Werkbank', size: 2.1, r: 22, speed: 0.22, color: '#ff8c5a' },
+        { name: 'Drucker', size: 1.5, r: 31, speed: 0.16, color: '#ffb38a' },
+      ],
+    },
+    {
+      id: 'aether', name: 'Aether', kind: 'Gasriese · mit Ringsystem',
+      type: 'gas', orbitR: 600, orbitY: 44, size: 16.0, speed: 0.015, inc: 0.10, tilt: 0.42,
+      colA: '#2a1a5e', colB: '#7a4bd0', colC: '#c9a8ff', glow: '#a67cff', glowAmt: 0.0,
+      ring: { inner: 23, outer: 40, color: '#b79cff', tilt: 0.42 },
+      icon: 'fa-atom', accent: '#a67cff',
+      title: 'Aether — Was bewegt den Geist?',
+      lead: 'Wirbelnde Wolkenbänder voller Formeln und Fragen.',
+      facts: [
+        'Physik & Astronomie — von Gravitation bis Fourier',
+        'Datenanalyse & Visualisierung',
+        'Gleichungen als Heimat: E=mc² · ∇·E=ρ/ε₀ · ℱ{f}',
+      ],
+      links: [
+        { url: 'https://professorquantumuniverse.github.io/Gravity-Calculator/', text: 'Gravity Calculator', icon: 'fas fa-weight-hanging' },
+        { url: 'https://professorquantumuniverse.github.io/AstroClub-Planetenquiz/', text: 'AstroClub Quiz', icon: 'fas fa-star' },
+        { url: 'https://jufoanalytics-main.streamlit.app/', text: 'JuFoAnalytics', icon: 'fas fa-chart-line' },
+      ],
+      moons: [
+        { name: 'AstroClub', size: 2.6, r: 52, speed: 0.15, color: '#c4a8ff' },
+        { name: 'Daten', size: 2.0, r: 66, speed: 0.11, color: '#9a78e0' },
+      ],
+    },
+    {
+      id: 'nexus', name: 'Nexus', kind: 'Eiswelt · Polarlichter',
+      type: 'ice', orbitR: 780, orbitY: -58, size: 10.0, speed: 0.011, inc: -0.22, tilt: 0.6,
+      colA: '#0a2540', colB: '#2f7fb5', colC: '#d8f4ff', glow: '#70ffd0', glowAmt: 0.0,
+      aurora: 1.0,
+      icon: 'fa-satellite-dish', accent: '#70d6ff',
+      title: 'Nexus — Wie erreicht man dich?',
+      lead: 'Kalt, klar, von Nordlichtern umspielt. Der Außenposten.',
+      facts: [
+        'Drei Monde umkreisen Nexus — jeder ein Kanal nach draußen.',
+      ],
+      links: [
+        { url: 'mailto:lorenzobaymueller@gmail.com', text: 'E-Mail', icon: 'fas fa-envelope' },
+        { url: 'https://github.com/ProfessorQuantumUniverse', text: 'GitHub', icon: 'fab fa-github' },
+        { url: 'https://f-droid.org/packages/com.olaf.rereminder/', text: 'F-Droid', icon: 'fab fa-android' },
+      ],
+      moons: [
+        { name: 'GitHub', size: 1.9, r: 20, speed: 0.27, color: '#e8e8ff', link: 'https://github.com/ProfessorQuantumUniverse' },
+        { name: 'F-Droid', size: 1.7, r: 28, speed: 0.2, color: '#9ad6a0', link: 'https://f-droid.org/packages/com.olaf.rereminder/' },
+        { name: 'Mail', size: 1.6, r: 36, speed: 0.15, color: '#aee6ff', link: 'mailto:lorenzobaymueller@gmail.com' },
+      ],
+    },
+  ],
+  // Tech-Stack als Asteroidengürtel (große = mehr Erfahrung). Anklickbar.
+  tech: [
+    { label: 'Python', size: 1.7, color: '#4b8bbe' },
+    { label: 'Kotlin', size: 1.6, color: '#a97bff' },
+    { label: 'JavaScript', size: 1.6, color: '#f0db4f' },
+    { label: 'HTML / CSS', size: 1.4, color: '#e34f26' },
+    { label: 'C++', size: 1.1, color: '#6a96cf' },
+    { label: 'Three.js', size: 1.2, color: '#70d6ff' },
+    { label: 'Android SDK', size: 1.3, color: '#3ddc84' },
+    { label: 'Raspberry Pi', size: 1.2, color: '#c51a4a' },
+    { label: 'Home Assistant', size: 1.0, color: '#41bdf5' },
+    { label: 'Streamlit', size: 0.9, color: '#ff4b4b' },
+    { label: 'GSAP', size: 0.9, color: '#88ce02' },
+    { label: 'Manim / QGIS', size: 0.8, color: '#9ab0c0' },
+  ],
+  // News-Kometen: jeder Komet trägt eine anklickbare Schlagzeile.
+  news: [
+    { text: 'Neu: ChronoTime — Liquid-Glass-Uhr', url: 'https://github.com/ProfessorQuantumUniverse/ChronoTime' },
+    { text: 'Neu: CryptMail — verschlüsselte Mails', url: 'https://github.com/ProfessorQuantumUniverse/CryptMail' },
+    { text: 'Neu: QR-Stream — Air-Gap-Transfer', url: 'https://professorquantumuniverse.github.io/QR-Stream/' },
+    { text: 'Neu: Gitcademy — Git interaktiv lernen', url: 'https://professorquantumuniverse.github.io/Gitcademy/' },
+  ],
+};
+
+/* ---- GLSL: hashbasiertes 3D-Value-Noise + FBM (für Planetenoberflächen) ---- */
+const GLSL_NOISE = `
+  vec3 hash3(vec3 p){
+    p = vec3(dot(p,vec3(127.1,311.7,74.7)),
+             dot(p,vec3(269.5,183.3,246.1)),
+             dot(p,vec3(113.5,271.9,124.6)));
+    return fract(sin(p)*43758.5453123)*2.0-1.0;
+  }
+  float vnoise(vec3 p){
+    vec3 i=floor(p), f=fract(p);
+    vec3 u=f*f*(3.0-2.0*f);
+    return mix(mix(mix(dot(hash3(i+vec3(0,0,0)),f-vec3(0,0,0)),
+                       dot(hash3(i+vec3(1,0,0)),f-vec3(1,0,0)),u.x),
+                   mix(dot(hash3(i+vec3(0,1,0)),f-vec3(0,1,0)),
+                       dot(hash3(i+vec3(1,1,0)),f-vec3(1,1,0)),u.x),u.y),
+               mix(mix(dot(hash3(i+vec3(0,0,1)),f-vec3(0,0,1)),
+                       dot(hash3(i+vec3(1,0,1)),f-vec3(1,0,1)),u.x),
+                   mix(dot(hash3(i+vec3(0,1,1)),f-vec3(0,1,1)),
+                       dot(hash3(i+vec3(1,1,1)),f-vec3(1,1,1)),u.x),u.y),u.z);
+  }
+  float fbm(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<5;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+`;
+
+/* ---- prozedurales Planeten-Material (Typ steuert Aussehen) ---- */
+function makePlanetMaterial(p) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime:      { value: 0 },
+      uColA:      { value: new THREE.Color(p.colA) },
+      uColB:      { value: new THREE.Color(p.colB) },
+      uColC:      { value: new THREE.Color(p.colC) },
+      uBands:     { value: p.type === 'gas' ? 1.0 : 0.0 },
+      uLava:      { value: p.type === 'lava' ? 1.0 : 0.0 },
+      uAurora:    { value: p.aurora ? 1.0 : 0.0 },
+      uGlow:      { value: p.type === 'rocky' ? 1.0 : 0.0 },
+      uGlowColor: { value: new THREE.Color(p.glow || '#ffffff') },
+      uSeed:      { value: Math.random() * 10 },
+      uSunDir:    { value: new THREE.Vector3(0.4, 0.5, 1).normalize() },
+    },
+    vertexShader: `
+      varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
+      void main(){
+        vObj = normalize(position);
+        vWNormal = normalize(mat3(modelMatrix) * normal);
+        vec4 wp = modelMatrix * vec4(position,1.0);
+        vWPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
+      uniform float uTime, uBands, uLava, uAurora, uGlow, uSeed;
+      uniform vec3 uColA, uColB, uColC, uGlowColor, uSunDir;
+      ${GLSL_NOISE}
+      void main(){
+        vec3 p = vObj;
+        float n = fbm(p*2.6 + uSeed);
+        // Gasriesen-Bänder: Breitengrad + wirbelnde Verzerrung
+        float warp = fbm(p*3.0 + vec3(uTime*0.04, uSeed, 0.0))*0.22;
+        float bands = sin(p.y*9.0 + warp*7.0)*0.5+0.5;
+        float surf = mix(n*0.5+0.5, bands, uBands);
+
+        vec3 col = mix(uColA, uColB, smoothstep(0.30,0.62,surf));
+        col = mix(col, uColC, smoothstep(0.60,0.95,surf));
+
+        // Lava-Adern: scharfe, pulsierende Glut in den Rissen
+        float veins = fbm(p*4.2 + uSeed*1.7);
+        float ridge = 1.0 - smoothstep(0.0, 0.06, abs(veins));
+        float pulse = 0.55 + 0.45*sin(uTime*1.6 + veins*12.0);
+        vec3 emissive = vec3(1.0,0.42,0.10) * ridge * pulse * uLava * 1.6;
+        col = mix(col, col*0.35, uLava*0.6);
+
+        // Beleuchtung: warmes Zentrumslicht (Schwarzes Loch) + ferner Sonnenstern + starkes Ambient
+        vec3 N = normalize(vWNormal);
+        float diffC = clamp(dot(N, normalize(-vWPos)), 0.0, 1.0);   // vom Zentrum
+        float diffS = clamp(dot(N, normalize(uSunDir)), 0.0, 1.0);  // vom fernen Stern
+        float light = 0.5 + 0.55 * diffC + 0.5 * diffS;             // hell genug, nichts versinkt
+        col *= light;
+        float diff = max(diffC, diffS);
+
+        // gezeitengebundene Glut: dem Zentrum zugewandte Seite leuchtet warm
+        emissive += uGlowColor * pow(diffC, 3.0) * uGlow * 1.0;
+
+        // Polarlichter: hohe Breitengrade auf der Nachtseite schimmern grün/cyan
+        float lat = abs(p.y);
+        float aur = smoothstep(0.55, 0.9, lat) * (1.0-diff);
+        float flick = 0.5 + 0.5*sin(uTime*2.0 + p.x*8.0 + p.z*6.0);
+        emissive += vec3(0.25,1.0,0.65) * aur * flick * uAurora * 0.9;
+
+        gl_FragColor = vec4(col + emissive, 1.0);
+      }`,
+  });
+}
+
+/* ---- weiche Atmosphären-/Glow-Hülle (Fresnel, additiv) ---- */
+function makeAtmosphere(color, radius) {
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide,
+    uniforms: { uColor: { value: new THREE.Color(color) } },
+    vertexShader: `varying vec3 vN; varying vec3 vV;
+      void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `varying vec3 vN; varying vec3 vV; uniform vec3 uColor;
+      void main(){ float rim=pow(1.0-max(dot(vN,vV),0.0),2.0); gl_FragColor=vec4(uColor*rim*2.4, rim*0.95); }`,
+  });
+  mat.toneMapped = false;
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 32), mat);
+}
+
+/* ---- weiche Ring-Textur (für Aether's Ringsystem) ---- */
+function makeRingTexture() {
+  const w = 256, h = 16;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  for (let x = 0; x < w; x++) {
+    const t = x / w;
+    const band = 0.4 + 0.6 * Math.abs(Math.sin(t * 22) * Math.sin(t * 7));
+    const edge = Math.sin(t * Math.PI);               // außen weich auslaufend
+    const a = Math.min(1, band * edge * 1.2);
+    ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+    ctx.fillRect(x, 0, 1, h);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/* ---- Orbit-Linie: zeigt die Systemebene, genau auf der Planetenbahn ---- */
+function buildOrbitLine(p) {
+  const SEG = 256;
+  const pts = [];
+  const axis = new THREE.Vector3(0, 0, 1);
+  for (let i = 0; i <= SEG; i++) {
+    const a = (i / SEG) * Math.PI * 2;
+    const v = new THREE.Vector3(Math.cos(a) * p.orbitR, p.orbitY, Math.sin(a) * p.orbitR);
+    v.applyAxisAngle(axis, p.inc);            // exakt wie die Planetenposition geneigt
+    pts.push(v);
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(p.accent), transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  mat.toneMapped = false;
+  const line = new THREE.LineLoop(geo, mat);
+  scene.add(line);
+  return line;
+}
+
+/* ---- ein Planetensystem (Planet + Atmosphäre + Ring + Monde) ---- */
+function buildPlanet(p, idx) {
+  buildOrbitLine(p);                           // dezente Bahnlinie auf der Ekliptik
+
+  const group = new THREE.Group();             // bewegt sich auf der Umlaufbahn
+  const body = new THREE.Group();              // trägt Planet + Eigenrotation
+  group.add(body);
+
+  const mat = makePlanetMaterial(p);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 48, 48), mat);
+  mesh.userData.planet = p;                    // für Raycast-Picking
+  body.add(mesh);
+
+  const atmo = makeAtmosphere(p.accent, p.size * 1.18);
+  body.add(atmo);
+
+  // optionaler Ring (Aether)
+  if (p.ring) {
+    const rg = new THREE.RingGeometry(p.ring.inner, p.ring.outer, 96);
+    // UV so anpassen, dass die Textur radial verläuft
+    const ringMat = new THREE.MeshBasicMaterial({
+      map: makeRingTexture(), color: new THREE.Color(p.ring.color), transparent: true,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.6,
+    });
+    ringMat.toneMapped = false;
+    const ring = new THREE.Mesh(rg, ringMat);
+    ring.rotation.x = Math.PI / 2 - p.ring.tilt;
+    body.add(ring);
+  }
+
+  body.rotation.z = p.tilt || 0;
+
+  // Monde
+  const moons = [];
+  (p.moons || []).forEach((m) => {
+    const moonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(m.size, 18, 18),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(m.color), roughness: 0.85, metalness: 0.05, emissive: new THREE.Color(m.color).multiplyScalar(0.12) })
+    );
+    moonMesh.userData.moon = m;
+    group.add(moonMesh);
+    moons.push({ mesh: moonMesh, r: m.r, speed: m.speed, angle: Math.random() * Math.PI * 2, inc: (Math.random() - 0.5) * 0.6, data: m });
+  });
+
+  scene.add(group);
+  // Startwinkel gleichmäßig verteilt -> Übersicht wirkt immer ausgewogen, nie gebündelt
+  const startAngle = (idx || 0) * (Math.PI * 2 / 4) + 0.5;
+  const rec = {
+    data: p, group, body, mesh, mat, moons,
+    angle: startAngle, orbitR: p.orbitR, orbitY: p.orbitY,
+    speed: p.speed, inc: p.inc, worldPos: new THREE.Vector3(),
+  };
+  planets.push(rec);
+  return rec;
+}
+
+/* ---- Tech-Asteroidengürtel: Partikelwolke + einzelne anklickbare Brocken ---- */
+const BELT_R0 = 455, BELT_R1 = 515;   // Gürtel zwischen Forge (380) und Aether (600)
+function buildAsteroidBelt(sprite) {
+  // (a) dünne Partikelwolke als Gürtel-Untergrund (deutlich reduziert)
+  const N = 420;
   const pos = new Float32Array(N * 3);
   const col = new Float32Array(N * 3);
   const tmp = new THREE.Color();
   for (let i = 0; i < N; i++) {
-    const r = 38 + Math.random() * 5;
+    const r = BELT_R0 + Math.random() * (BELT_R1 - BELT_R0);
     const a = Math.random() * Math.PI * 2;
     pos[i * 3] = Math.cos(a) * r;
-    pos[i * 3 + 1] = (Math.random() - 0.5) * 1.6;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 16;
     pos[i * 3 + 2] = Math.sin(a) * r;
-    tmp.copy(COL.cyan).multiplyScalar(0.25 + Math.random() * 0.4);
+    tmp.copy(COL.cyan).lerp(COL.white, Math.random() * 0.5).multiplyScalar(0.4 + Math.random() * 0.5);
     col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const debris = new THREE.Points(geo, new THREE.PointsMaterial({
-    size: 0.7, map: sprite, vertexColors: true, transparent: true,
+  asteroidBelt = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 2.0, map: sprite, vertexColors: true, transparent: true,
     depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, opacity: 0.55,
   }));
-  debris.rotation.x = 0.45;
-  scene.add(debris);
-  orbiters.push({ obj: debris, spin: 0.05, axis: new THREE.Vector3(Math.sin(0.45), Math.cos(0.45), 0).normalize() });
+  scene.add(asteroidBelt);
 
-  // (b) ein paar kleine Planeten/Monde (dezent, nicht leuchtend)
-  const planets = [
-    { r: 84, y: 14, size: 2.0, color: 0x6b7fa6, speed: 0.14, inc: 0.3 },
-    { r: 108, y: -22, size: 3.0, color: 0x8a6b9c, speed: 0.10, inc: -0.22 },
-    { r: 138, y: 34, size: 1.4, color: 0x4a6b7a, speed: 0.07, inc: 0.5 },
-  ];
-  planets.forEach(p => {
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(p.size, 24, 24),
-      new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.9, metalness: 0.1, emissive: 0x05070d })
+  // (b) benannte Tech-Brocken (größer, anklickbar) gleichmäßig im Gürtel
+  WORLD.tech.forEach((t, i) => {
+    const a = (i / WORLD.tech.length) * Math.PI * 2 + Math.random() * 0.2;
+    const r = (BELT_R0 + BELT_R1) / 2 + (Math.random() - 0.5) * 40;
+    const rock = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(t.size * 4.4, 0),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(t.color), roughness: 0.7, metalness: 0.25, emissive: new THREE.Color(t.color).multiplyScalar(0.18), flatShading: true })
     );
-    scene.add(mesh);
-    orbiters.push({
-      obj: mesh, orbitR: p.r, orbitY: p.y, angle: Math.random() * Math.PI * 2,
-      speed: p.speed, inc: p.inc, planet: true,
-    });
+    rock.userData.tech = t;
+    rock.userData.baseSize = t.size * 4.4;
+    scene.add(rock);
+    techRocks.push({ mesh: rock, data: t, r, y: (Math.random() - 0.5) * 20, angle: a, spin: 0.2 + Math.random() * 0.4, worldPos: new THREE.Vector3() });
   });
+}
 
-  // dezentes Licht, damit die Planeten Form bekommen
-  const key = new THREE.PointLight(0xffe6c0, 2.2, 0, 1.6);
+/* ---- Leuchtende Partikel in der Systemebene (Ekliptik) – macht die Ebene
+   greifbar & lenkt den Blick, wie auf der Referenzseite. Bewusst sparsam. ---- */
+function buildEclipticField(sprite) {
+  const N = 900;
+  const pos = new Float32Array(N * 3);
+  const col = new Float32Array(N * 3);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    // Radius bevorzugt im inneren/mittleren Systembereich (sqrt-Verteilung -> dichter innen)
+    const r = 120 + Math.sqrt(Math.random()) * 740;
+    const a = Math.random() * Math.PI * 2;
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 24;   // dünne Scheibe
+    pos[i * 3 + 2] = Math.sin(a) * r;
+    const pick = Math.random();
+    tmp.copy(pick > 0.6 ? COL.cyan : pick > 0.3 ? COL.violet : COL.white)
+       .multiplyScalar(0.5 + Math.random() * 0.6);
+    col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  eclipticField = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 3.4, map: sprite, vertexColors: true, transparent: true,
+    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, opacity: 0.85,
+  }));
+  eclipticField.material.toneMapped = false;
+  scene.add(eclipticField);
+}
+
+function buildWorld(sprite) {
+  // Zentrales Punktlicht (warmer Akzent vom Schwarzen Loch) – ohne Abfall, damit
+  // es auch die weit entfernten Planeten erreicht
+  const key = new THREE.PointLight(0xffe6c0, 1.4, 0, 0);
   key.position.set(0, 0, 0);
   scene.add(key);
-  scene.add(new THREE.AmbientLight(0x223044, 0.6));
+  // Ferner "Sonnenstern": gerichtetes Licht, das ALLE Planeten gleichmäßig formt
+  const sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
+  sun.position.set(0.4, 0.5, 1).normalize();
+  scene.add(sun);
+  // deutlich helleres Umgebungslicht -> nichts versinkt im Schwarz
+  scene.add(new THREE.AmbientLight(0x4a5a78, 1.1));
+
+  WORLD.planets.forEach(buildPlanet);
+  buildEclipticField(sprite);
+  buildAsteroidBelt(sprite);
+  buildWorldLabels();   // erzeugt nur noch den (leeren) Container für News-Kometen
+}
+
+/* ---- Container für News-Komet-Schlagzeilen (keine Planeten-/Tech-Labels mehr:
+   Entdeckung per Anflug, wie bei Bruno Simon) ---- */
+function buildWorldLabels() {
+  labelLayer = document.createElement('div');
+  labelLayer.className = 'u-labels';
+  labelLayer.setAttribute('aria-hidden', 'true');
+  overlay.appendChild(labelLayer);
+}
+
+// Achse für leicht geneigte Umlaufbahnen (wiederverwendet)
+const _orbitAxis = new THREE.Vector3();
+function updateWorld(dt) {
+  // Annäherungs-Stillstand: nahe an / fokussiert auf einem Planeten friert das System sanft ein.
+  // (nutzt worldPos vom Vorframe -> 1 Frame Versatz, unmerklich)
+  let nearest = Infinity;
+  for (const pl of planets) nearest = Math.min(nearest, camera.position.distanceTo(pl.worldPos));
+  const targetCalm = focusedPlanet ? 1 : (1 - THREE.MathUtils.smoothstep(nearest, 90, 340));
+  worldCalm += (targetCalm - worldCalm) * Math.min(1, dt * 3.5);
+  const motion = 1 - worldCalm;   // globaler Bewegungs-Faktor
+
+  // Planeten: Umlaufbahn (leicht geneigt) + Eigenrotation + Monde + Shader-Zeit
+  for (const pl of planets) {
+    pl.angle += dt * pl.speed * motion;
+    const x = Math.cos(pl.angle) * pl.orbitR;
+    const z = Math.sin(pl.angle) * pl.orbitR;
+    pl.group.position.set(x, pl.orbitY, z).applyAxisAngle(_orbitAxis.set(0, 0, 1), pl.inc);
+    pl.group.getWorldPosition(pl.worldPos);
+    // gezeitengebundene Origin dreht sich nicht (eine Seite bleibt zum Zentrum); Eigenrotation läuft (sanft) weiter
+    if (pl.data.type !== 'rocky') pl.body.rotation.y += dt * 0.05 * (0.3 + 0.7 * motion);
+    pl.mat.uniforms.uTime.value = elapsed;
+
+    for (const mo of pl.moons) {
+      mo.angle += dt * mo.speed * motion;
+      const mx = Math.cos(mo.angle) * mo.r;
+      const mz = Math.sin(mo.angle) * mo.r;
+      mo.mesh.position.set(mx, Math.sin(mo.angle) * mo.r * Math.sin(mo.inc), mz);
+      mo.mesh.rotation.y += dt * 0.3 * motion;
+    }
+  }
+
+  updateNewsComets(dt);
+
+  // Asteroidengürtel + Ekliptik-Staub: sehr langsame Eigendrehung (hält bei Annäherung an)
+  if (asteroidBelt) asteroidBelt.rotation.y += dt * 0.005 * motion;
+  if (eclipticField) eclipticField.rotation.y += dt * 0.004 * motion;
+
+  // Tech-Brocken: Umlauf + Eigenrotation + Hervorhebung bei Hover
+  for (const tr of techRocks) {
+    tr.angle += dt * 0.008 * motion;
+    const x = Math.cos(tr.angle) * tr.r;
+    const z = Math.sin(tr.angle) * tr.r;
+    tr.mesh.position.set(x, tr.y, z);
+    tr.mesh.rotation.x += dt * tr.spin * 0.6 * (0.3 + 0.7 * motion);
+    tr.mesh.rotation.y += dt * tr.spin * (0.3 + 0.7 * motion);
+    tr.mesh.getWorldPosition(tr.worldPos);
+    const hot = (hoveredWorld === tr);
+    const s = hot ? 1.4 : 1.0;
+    tr.mesh.scale.lerp(_tmpVec.set(s, s, s), 0.15);
+  }
 }
 
 /* ---- Gravitations-Lensing als Post-Process (verbiegt das Bild ums Loch) ---- */
@@ -841,7 +1419,7 @@ async function buildCards() {
     cards.push(card);
     scene.add(mesh);
   });
-  if (counterEl) counterEl.textContent = '◍ ' + projects.length + ' systems mapped';
+  if (counterEl) counterEl.textContent = '◍ ' + projects.length + ' projects · ' + WORLD.planets.length + ' worlds';
 
   // EIN geteilter Glow-Halo (folgt der aktiven Karte) – spart 39 additive Planes
   const gMat = new THREE.MeshBasicMaterial({
@@ -860,12 +1438,13 @@ function buildScene() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.78;
+  renderer.toneMappingExposure = 0.9;   // etwas heller -> Planeten besser sichtbar
 
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x010206, 0.0014);
+  // sehr dezenter Fog: Tiefe ohne die weiträumigen Planeten zu verschlucken
+  scene.fog = new THREE.FogExp2(0x05060f, 0.00012);
 
-  camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 6000);
+  camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 12000);
   camera.rotation.order = 'YXZ';
   camera.position.copy(INSIDE_HOME);
 
@@ -874,8 +1453,8 @@ function buildScene() {
   controls.dampingFactor = 0.06;
   controls.enablePan = false;
   controls.minDistance = 16;
-  controls.maxDistance = 700;
-  controls.autoRotateSpeed = 0.3;
+  controls.maxDistance = 3200;
+  controls.autoRotateSpeed = 0.08;       // kaum merkbares Auto-Drift (Ruhe)
   controls.target.set(0, 0, 0);
   controls.enabled = false; // Start im Dome-Modus (Free-Look)
 
@@ -888,14 +1467,14 @@ function buildScene() {
   buildNebula();
   buildBlackHole();
   buildDisk();
-  buildOrbiters(sprite);
-  buildStardust(sprite);
+  buildWorld(sprite);
+  // buildStardust entfernt: fliegende Vordergrund-Partikel wirkten unruhig
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.62, 0.5, 0.42 // strength, radius, threshold -> Innenrand & Photonenring glühen, ohne auszubrennen
+    0.42, 0.55, 0.5 // strength, radius, threshold -> dezenteres Glühen, Planeten brennen nicht aus
   );
   composer.addPass(bloomPass);
   // Gravitations-Lensing als letzter Pass
@@ -933,6 +1512,7 @@ function onKeyDown(e) {
   }
   if (e.key === 'Escape') {
     if (spaghetti) resetSpaghetti();
+    else if (focusedPlanet) unfocusPlanet();
     else if (focused) unfocusCard();
     else exitToClassic(false);
   }
@@ -947,7 +1527,7 @@ function dismissHelpSoon() {
 }
 
 // Raumschiff-Physik: Beschleunigung + Trägheit/Drift (in beiden Modi)
-const FLY_ACCEL = 135, FLY_DAMP = 0.96, FLY_MAX = 78;
+const FLY_ACCEL = 320, FLY_DAMP = 0.95, FLY_MAX = 240;
 function applyMovement(dt) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
   const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -1025,13 +1605,41 @@ function onPointerUp(ev) {
   const bh = raycaster.intersectObject(horizon, false);
   const cardHits = intersectCards();
   const cardDist = cardHits.length ? cardHits[0].distance : Infinity;
-  if (bh.length && bh[0].distance < cardDist) { exitToClassic(true); return; }
-  if (cardHits.length) { focusCard(cardHits[0].object.userData.card); return; }
-  if (focused) unfocusCard();
+  const world = pickWorld();          // Planeten / Monde / Tech-Brocken
+  const worldDist = world ? world.distance : Infinity;
+  if (bh.length && bh[0].distance < cardDist && bh[0].distance < worldDist) { exitToClassic(true); return; }
+  if (cardHits.length && cardDist < worldDist) { focusCard(cardHits[0].object.userData.card); return; }
+  if (world) {
+    if (world.type === 'planet') focusPlanet(world.planet);
+    else if (world.type === 'tech') focusTech(world.tech);
+    else if (world.type === 'moon' && world.moon.data.link) window.open(world.moon.data.link, '_blank', 'noopener');
+    return;
+  }
+  if (focusedPlanet) unfocusPlanet();
+  else if (focused) unfocusCard();
+}
+
+// Raycast gegen alle Weltobjekte; gibt das nächste mit Typ-Info zurück
+function pickWorld() {
+  let best = null;
+  for (const pl of planets) {
+    const hit = raycaster.intersectObject(pl.mesh, false)[0];
+    if (hit && (!best || hit.distance < best.distance)) best = { distance: hit.distance, type: 'planet', planet: pl };
+    for (const mo of pl.moons) {
+      const mh = raycaster.intersectObject(mo.mesh, false)[0];
+      if (mh && (!best || mh.distance < best.distance)) best = { distance: mh.distance, type: 'moon', moon: mo };
+    }
+  }
+  for (const tr of techRocks) {
+    const th = raycaster.intersectObject(tr.mesh, false)[0];
+    if (th && (!best || th.distance < best.distance)) best = { distance: th.distance, type: 'tech', tech: tr };
+  }
+  return best;
 }
 
 // Sanfte Kamerafahrt: Position UND Blickrichtung werden interpoliert (kein Sprung)
-function flyCameraTo(targetPos, lookAtVec, duration = 1.2, ease = 'power3.inOut') {
+// warp=true -> Speed-Streaks-Puls für ein spürbares "Ich reise weit"-Gefühl
+function flyCameraTo(targetPos, lookAtVec, duration = 1.2, ease = 'power3.inOut', warp = false) {
   return new Promise((resolve) => {
     const m = new THREE.Matrix4().lookAt(targetPos, lookAtVec, camera.up);
     const endQuat = new THREE.Quaternion().setFromRotationMatrix(m);
@@ -1040,6 +1648,8 @@ function flyCameraTo(targetPos, lookAtVec, duration = 1.2, ease = 'power3.inOut'
     }
     const startPos = camera.position.clone();
     const startQuat = camera.quaternion.clone();
+    const travel = startPos.distanceTo(targetPos);
+    const warpPeak = warp ? Math.min(260, 60 + travel * 0.4) : 0;   // weiter = stärkerer Warp
     const s = { t: 0 };
     camFlying = true;
     gsap.to(s, {
@@ -1047,8 +1657,9 @@ function flyCameraTo(targetPos, lookAtVec, duration = 1.2, ease = 'power3.inOut'
       onUpdate: () => {
         camera.position.lerpVectors(startPos, targetPos, s.t);
         camera.quaternion.copy(startQuat).slerp(endQuat, s.t);
+        flyWarpSpeed = Math.sin(s.t * Math.PI) * warpPeak;          // Glockenkurve: ramp auf/ab
       },
-      onComplete: () => { camFlying = false; resolve(); },
+      onComplete: () => { camFlying = false; flyWarpSpeed = 0; resolve(); },
     });
   });
 }
@@ -1077,6 +1688,95 @@ function unfocusCard() {
   }
 }
 
+/* ---- Planet anfliegen: weite Warp-Reise, dann Welt-Panel ---- */
+function focusPlanet(pl) {
+  if (focused) unfocusCard();
+  focusedPlanet = pl;
+  controls.enabled = false;
+  showPlanetDetail(pl.data);
+  // Kameraposition: zwischen Zentrum und Planet, leicht versetzt -> Planet bildfüllend
+  const wp = pl.worldPos.clone();
+  const outward = wp.clone().normalize();
+  const camPos = wp.clone()
+    .addScaledVector(outward, pl.data.size * 3.6)
+    .add(new THREE.Vector3(0, pl.data.size * 1.2, 0));
+  flyCameraTo(camPos, wp, 2.2, 'power3.inOut', true);   // länger + Warp-Puls
+}
+function unfocusPlanet() {
+  const was = focusedPlanet;
+  focusedPlanet = null;
+  hideDetail();
+  if (!was) return;
+  if (viewMode === 'outside') {
+    flyCameraTo(OUTSIDE_HOME, center, 1.5).then(() => { controls.target.set(0, 0, 0); controls.enabled = true; });
+  } else {
+    flyCameraTo(INSIDE_HOME, new THREE.Vector3(80, 2, 0), 1.5).then(() => { fly.yaw = camera.rotation.y; fly.pitch = camera.rotation.x; });
+  }
+}
+
+/* ---- Tech-Brocken: zeigt zugehörige Projekte ---- */
+function focusTech(tr) {
+  const t = tr.data;
+  // Projekte finden, die diese Technologie verwenden (Tag- oder Titel-Match)
+  const needle = t.label.toLowerCase().split(/[\s/]+/)[0];
+  const matches = projects.filter(pr =>
+    (pr.tags || []).some(tag => tag.toLowerCase().includes(needle)) ||
+    (pr.title || '').toLowerCase().includes(needle) ||
+    (pr.description || '').toLowerCase().includes(needle)
+  );
+  showTechDetail(t, matches);
+}
+
+// Panel-Akzent (Rahmen + Glow) auf eine Farbe setzen oder zurücksetzen
+function setPanelAccent(color) {
+  if (!detailEl) return;
+  if (color) {
+    detailEl.style.borderColor = color;
+    detailEl.style.boxShadow = `0 20px 60px rgba(0,0,0,0.6), 0 0 36px ${color}33`;
+  } else {
+    detailEl.style.borderColor = '';
+    detailEl.style.boxShadow = '';
+  }
+}
+
+/* ---- Detail-Panel: Planet-Welt ---- */
+function showPlanetDetail(p) {
+  if (!detailBody) return;
+  const facts = (p.facts || []).map(f => `<li>${f}</li>`).join('');
+  const links = (p.links || []).map(l =>
+    `<a href="${l.url}" target="_blank" rel="noopener">${l.text}<i class="${l.icon}"></i></a>`).join('');
+  detailBody.innerHTML = `
+    <div class="u-detail-kicker" style="color:${p.accent}"><i class="fas ${p.icon}"></i> ${p.kind}</div>
+    <h3>${p.title}</h3>
+    <p>${p.lead || ''}</p>
+    ${facts ? `<ul class="u-detail-facts">${facts}</ul>` : ''}
+    ${links ? `<div class="u-detail-links">${links}</div>` : ''}
+  `;
+  setPanelAccent(p.accent);
+  detailEl.classList.add('is-open');
+  detailEl.setAttribute('aria-hidden', 'false');
+}
+
+/* ---- Detail-Panel: Tech-Brocken (Projekte mit dieser Technologie) ---- */
+function showTechDetail(t, matches) {
+  if (!detailBody) return;
+  const list = matches.length
+    ? matches.map(pr => {
+        const url = (pr.links && pr.links[0] && pr.links[0].url) || '#';
+        return `<a href="${url}" target="_blank" rel="noopener">${pr.title}<i class="fas fa-arrow-up-right-from-square"></i></a>`;
+      }).join('')
+    : '<p style="opacity:.6">Noch keine verknüpften Projekte.</p>';
+  detailBody.innerHTML = `
+    <div class="u-detail-kicker" style="color:${t.color}"><i class="fas fa-microchip"></i> Tech-Asteroid</div>
+    <h3>${t.label}</h3>
+    <p>${matches.length} Projekt${matches.length === 1 ? '' : 'e'} im Universum nutzen diese Technologie:</p>
+    <div class="u-detail-links u-detail-techlinks">${list}</div>
+  `;
+  setPanelAccent(t.color);
+  detailEl.classList.add('is-open');
+  detailEl.setAttribute('aria-hidden', 'false');
+}
+
 function showDetail(project, full) {
   if (!detailBody) return;
   const tags = (project.tags || []).map(t => `<span>${t}</span>`).join('');
@@ -1090,6 +1790,7 @@ function showDetail(project, full) {
     <div class="u-detail-tags">${tags}</div>
     ${full ? `<div class="u-detail-links">${links}</div>` : '<p style="opacity:.6;font-family:var(--font-secondary);font-size:.8rem">Klick die Karte für Links &amp; Details</p>'}
   `;
+  setPanelAccent(null);   // Karten nutzen den Standard-Violett-Rahmen
   detailEl.classList.add('is-open');
   detailEl.setAttribute('aria-hidden', 'false');
 }
@@ -1097,6 +1798,7 @@ function hideDetail() {
   if (!detailEl) return;
   detailEl.classList.remove('is-open');
   detailEl.setAttribute('aria-hidden', 'true');
+  setPanelAccent(null);
 }
 
 // Fadenkreuz-Label aktualisieren (Dome-Modus)
@@ -1167,40 +1869,21 @@ function animate() {
   elapsed += dt;
 
   if (disk && disk.material.uniforms) disk.material.uniforms.uTime.value = elapsed;
-  for (let i = 0; i < starLayers.length; i++) starLayers[i].rotation.y += dt * (0.006 - i * 0.0018);
-  if (starsBright) starsBright.rotation.y += dt * 0.003;
-  if (starMat) starMat.uniforms.uTime.value = elapsed;           // Funkeln
-  if (nebula) {
-    nebula.rotation.y += dt * 0.012;
-    for (const m of nebula.children) {        // nah an der Kamera ausblenden -> kein Weiß-Wash beim Durchfliegen
-      m.getWorldPosition(_tmpVec);
-      m.material.opacity = m.userData.baseOpacity * THREE.MathUtils.smoothstep(_tmpVec.distanceTo(camera.position), 30, 140);
-    }
-  }
-  if (stardust) { stardust.position.copy(camera.position); stardust.rotation.y += dt * 0.03; } // Vordergrund-Parallaxe
+  if (starMat) starMat.uniforms.uTime.value = elapsed;           // Funkeln (Sterne bleiben statisch positioniert)
+  // Nebel: statisch (keine Rotation mehr) -> Ruhe; weit draußen, daher keine Nah-Ausblendung nötig
   if (photonRing) { photonRing.quaternion.copy(camera.quaternion); photonRing.scale.setScalar(1 + Math.sin(elapsed * 1.5) * 0.015); }
   updateNova(dt);
   updateComets(dt);
-
-  // zusätzliche Orbit-Elemente bewegen
-  for (const o of orbiters) {
-    if (o.planet) {
-      o.angle += dt * o.speed;
-      const x = Math.cos(o.angle) * o.orbitR;
-      const z = Math.sin(o.angle) * o.orbitR;
-      o.obj.position.set(x, o.orbitY, z).applyAxisAngle(new THREE.Vector3(0, 0, 1), o.inc);
-      o.obj.rotation.y += dt * 0.3;
-    } else if (o.axis) {
-      o.obj.rotateOnAxis(o.axis, dt * o.spin);
-    }
-  }
+  updateWorld(dt);
 
   // Kamera-Steuerung je nach Modus (Intro/sanfte Fahrten steuern selbst)
-  if (!focused && !spaghetti && !introActive && !camFlying) {
+  if (!focused && !focusedPlanet && !spaghetti && !introActive && !camFlying) {
     if (viewMode === 'inside') { updateFly(dt); }
     else { applyMovement(dt); controls.update(); }
   }
-  drawSpeed(fly.vel.length());   // Speed-Streaks bei hohem Tempo
+  // Beim Planet-Fokus folgt der Blick dem (langsam weiterziehenden) Planeten
+  if (focusedPlanet && !camFlying) camera.lookAt(focusedPlanet.worldPos);
+  drawSpeed(Math.max(fly.vel.length(), flyWarpSpeed));   // Speed-Streaks bei Tempo oder Warp-Reise
 
   // Gravitations-Lensing aktualisieren
   updateLens();
@@ -1212,7 +1895,7 @@ function animate() {
   }
 
   // Hover-Erkennung (nicht beim Draggen/Fokus/Intro)
-  if (!isDown && !focused && !spaghetti && !introActive) {
+  if (!isDown && !focused && !focusedPlanet && !spaghetti && !introActive) {
     const hits = intersectCards();
     let card = hits.length ? hits[0].object.userData.card : null;
     // Hysterese: aktuellen Hover halten, solange er noch getroffen wird (kein Flackern)
@@ -1223,11 +1906,17 @@ function animate() {
       if (card) showDetail(card.mesh.userData.project, false);
       else hideDetail();
     }
+    // Welt-Hover (Planeten/Tech-Brocken) — nur Cursor + Brocken-Hervorhebung
+    const wh = card ? null : pickWorld();
+    hoveredWorld = (wh && (wh.type === 'tech' ? wh.tech : null)) || null;
+    if (wh && !card) glCanvas.classList.add('is-pointer');
+  } else if (focusedPlanet) {
+    hoveredWorld = null;
   }
 
-  // Karten-Kuppel langsam drehen (pausiert bei Hover/Fokus)
-  const rotating = !hovered && !focused && !spaghetti;
-  if (rotating) domeAngle += dt * 0.025;
+  // Karten-Kuppel sehr langsam drehen (pausiert bei Hover/Fokus, friert bei Planet-Nähe ein)
+  const rotating = !hovered && !focused && !focusedPlanet && !spaghetti;
+  if (rotating) domeAngle += dt * 0.008 * (1 - worldCalm);
 
   for (const c of cards) {
     const p = c.base.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), domeAngle);
@@ -1274,7 +1963,7 @@ function animate() {
   if (focused && !camFlying) camera.lookAt(focused.mesh.position);
 
   // Fadenkreuz-Ziel (Dome-Modus): zeigt Projekt oder Singularität in der Bildmitte
-  if (viewMode === 'inside' && !focused && !spaghetti && !introActive && !camFlying && cardsRevealed) {
+  if (viewMode === 'inside' && !focused && !focusedPlanet && !spaghetti && !introActive && !camFlying && cardsRevealed) {
     raycaster.setFromCamera(CENTER2, camera);
     const rHits = raycaster.intersectObjects(cards.map(c => c.mesh), false);
     const bhHit = raycaster.intersectObject(horizon, false);
@@ -1338,7 +2027,7 @@ const INTRO_LOOK = new THREE.Vector3(130, 4, 0); // Blick nach außen aufs Karte
 function setCameraIntroStart() {
   introActive = true;
   const ang = Math.PI * 0.15;
-  camera.position.set(Math.cos(ang) * 460, 140, Math.sin(ang) * 460);
+  camera.position.set(Math.cos(ang) * 2000, 880, Math.sin(ang) * 2000);
   camera.lookAt(center);
 }
 function revealCardsInstant() {
@@ -1488,9 +2177,9 @@ function runIntro() {
     introActive = true;
     cards.forEach(c => { c.mesh.visible = false; }); // bis zur Supernova verborgen
 
-    // Phase A: von AUSSEN mehrmals ums Loch kreisen (annähern, aber außen bleiben)
+    // Phase A: von WEIT AUSSEN durchs ganze System spiralen, hinab zum Loch
     const turns = 2.0;
-    const startR = 460, endR = 175, startY = 140, endY = 64, startAng = Math.PI * 0.15;
+    const startR = 2000, endR = 175, startY = 880, endY = 64, startAng = Math.PI * 0.15;
     const s = { t: 0 };
     introTween = gsap.to(s, {
       t: 1, duration: 3.6, ease: 'power1.inOut',
@@ -1657,7 +2346,7 @@ function wire() {
   });
   modeClassicBtn && modeClassicBtn.addEventListener('click', () => exitToClassic(false));
   backBtn && backBtn.addEventListener('click', backToTop);
-  detailCloseBtn && detailCloseBtn.addEventListener('click', () => { if (focused) unfocusCard(); else hideDetail(); });
+  detailCloseBtn && detailCloseBtn.addEventListener('click', () => { if (focusedPlanet) unfocusPlanet(); else if (focused) unfocusCard(); else hideDetail(); });
   terminalExit && terminalExit.addEventListener('click', resetSpaghetti);
 
   if (hintEl) {
