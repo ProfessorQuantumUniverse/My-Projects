@@ -28,12 +28,12 @@ const COL = {
   white:  new THREE.Color('#ffffff'),
 };
 
-const BH_RADIUS   = 6;        // Event-Horizont
-const DISK_INNER  = 7.4;
-const DISK_OUTER  = 23;
-const DOME_R      = 60;       // Radius des Karten-Loops (mehr Platz)
-const INSIDE_HOME  = new THREE.Vector3(0, 10, 0);
-const OUTSIDE_HOME = new THREE.Vector3(0, 36, 150);
+const BH_RADIUS   = 10;       // Event-Horizont (groß & prominent)
+const DISK_INNER  = 12.5;
+const DISK_OUTER  = 60;
+const DOME_R      = 104;      // Radius des Karten-Loops (mehr Platz ums große Loch)
+const INSIDE_HOME  = new THREE.Vector3(0, 18, 0);
+const OUTSIDE_HOME = new THREE.Vector3(0, 54, 220);
 
 // Render-Layer: 0 = Hintergrund/Loch/Scheibe (mit Lensing), 1 = Karten
 // (lens-immun, darüber gerendert), 2 = Horizont nur für Verdeckungs-Tiefe
@@ -67,6 +67,11 @@ const glitchEl       = document.getElementById('u-glitch');
 const terminalEl     = document.getElementById('u-terminal');
 const terminalText   = document.getElementById('u-terminal-text');
 const terminalExit   = document.getElementById('u-terminal-exit');
+const reticleEl      = document.getElementById('u-reticle');
+const reticleLabel   = document.getElementById('u-reticle-label');
+const counterEl      = document.getElementById('u-counter');
+const speedCanvas    = document.getElementById('u-speed');
+const speedCtx       = speedCanvas ? speedCanvas.getContext('2d') : null;
 
 /* ----------------------------------------------------------------
    Hilfsfunktionen
@@ -197,22 +202,65 @@ function fadeOutWarp() {
   setTimeout(hideWarp, 650);
 }
 
+/* ---- Speed-Streaks: feine Linien an den Rändern bei hohem Tempo ---- */
+const speedAngles = [];
+for (let i = 0; i < 56; i++) speedAngles.push(Math.random() * Math.PI * 2);
+function sizeSpeedCanvas() {
+  if (!speedCanvas) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  speedCanvas.width = Math.floor(window.innerWidth * dpr);
+  speedCanvas.height = Math.floor(window.innerHeight * dpr);
+}
+function drawSpeed(speed) {
+  if (!speedCtx) return;
+  const W = speedCanvas.width, H = speedCanvas.height;
+  speedCtx.clearRect(0, 0, W, H);
+  const k = Math.min(1, Math.max(0, (speed - 42) / (FLY_MAX - 42)));
+  if (k <= 0.01) return;
+  const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  speedCtx.lineCap = 'round';
+  speedCtx.strokeStyle = 'rgba(190,215,255,' + (0.4 * k).toFixed(3) + ')';
+  speedCtx.lineWidth = 1.4 * dpr;
+  for (let i = 0; i < speedAngles.length; i++) {
+    const a = speedAngles[i] + Math.sin(elapsed * 3 + i) * 0.02;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    const base = maxR * (0.6 + 0.34 * fract(Math.sin(i * 12.9898) * 43758.5453));
+    const len = maxR * (0.10 + 0.20 * k) * (0.6 + fract(i * 0.37));
+    speedCtx.beginPath();
+    speedCtx.moveTo(cx + dx * base, cy + dy * base);
+    speedCtx.lineTo(cx + dx * (base + len), cy + dy * (base + len));
+    speedCtx.stroke();
+  }
+}
+
 /* ================================================================
    3) THREE.JS SZENE
    ================================================================ */
 let renderer, scene, camera, composer, controls, raycaster;
 const pointer = new THREE.Vector2(-2, -2);
+const CENTER2 = new THREE.Vector2(0, 0);   // Bildmitte für das Fadenkreuz
+const _tmpVec = new THREE.Vector3();       // Wiederverwendbarer Vektor
 const dummy = new THREE.Object3D();
 const clock = new THREE.Clock();
 const center = new THREE.Vector3(0, 0, 0);
 
 let horizon, disk, diskOccluder, photonRing, glowRim, starfield, starsBright, nebula;
-let lensPass, bloomPass, spriteTex;
+let starLayers = [];             // 3 Sternenschichten (nah/mittel/fern) für Parallaxe
+let lensPass, bloomPass, spriteTex, starMat;
+let stardust = null;             // mitfliegender Vordergrund-Sternenstaub
+let cardGlow = null;             // einzelner Glow-Halo, folgt der aktiven Karte
 let novaSystem = null;           // aktive Supernova-Partikel
+let comets = [];                 // Sternschnuppen
+let cometTimer = 0;
 let cards = [];
 let orbiters = [];              // zusätzliche Objekte im Orbit (Planeten, Trümmer)
 let projects = [];
 let domeAngle = 0;
+let elapsed = 0;                 // Gesamtzeit (für Twinkle/Shader)
+let lastInput = 0;               // für Idle-Auto-Drift
+let reticleCard = null;          // Karte im Fadenkreuz (Dome-Modus)
+let helpDismissed = false;       // Hilfe-UI nach erster Bewegung ausblenden
 
 let sceneBuilt = false;
 let running = false;
@@ -228,8 +276,8 @@ let introFinish = null;
 let cardsRevealed = false;       // Karten erscheinen erst nach der Supernova
 let camFlying = false;           // sanfte Kamerafahrt (Fokus/Modus/Settle) aktiv
 
-// Free-Look / Fly-State (Dome-Modus)
-const fly = { yaw: 0, pitch: 0.12, keys: new Set() };
+// Free-Look / Fly-State (Dome-Modus) — mit Inertia für weiche Bewegung
+const fly = { yaw: 0, pitch: 0.12, yawVel: 0, pitchVel: 0, vel: new THREE.Vector3(), keys: new Set() };
 let isDown = false, dragging = false, downX = 0, downY = 0, lastX = 0, lastY = 0;
 
 /* ---- weiche Partikel-Textur ---- */
@@ -244,6 +292,45 @@ function makeSpriteTexture() {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/* ---- Value-Noise (für organische Scheibenstruktur / Staubbahnen) ---- */
+function fract(x) { return x - Math.floor(x); }
+function hash2(x, y) { return fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453); }
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+/* ---- prozedurale, weiche Nebel-/Rauchtextur ---- */
+function makeNebulaTexture() {
+  const s = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  // viele weiche Blobs -> rauchige Wolke
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * s, y = Math.random() * s, r = 18 + Math.random() * 70;
+    const a = 0.04 + Math.random() * 0.10;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+  }
+  // Ränder weich auf 0 faden (nahtlose Wolke)
+  ctx.globalCompositeOperation = 'destination-in';
+  const vg = ctx.createRadialGradient(s / 2, s / 2, s * 0.1, s / 2, s / 2, s * 0.5);
+  vg.addColorStop(0, 'rgba(255,255,255,1)');
+  vg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, s, s);
+  ctx.globalCompositeOperation = 'source-over';
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -276,31 +363,141 @@ function makeStarLayer(N, rMin, rMax, size, sprite, brightBias) {
   return new THREE.Points(geo, mat);
 }
 function buildStarfield(sprite) {
-  starfield   = makeStarLayer(4200, 600, 1800, 2.2, sprite, 0.3);   // feines, tiefes Feld
-  starsBright = makeStarLayer(140, 450, 1300, 7.0, sprite, 0.85);   // wenige helle Sterne
-  scene.add(starfield);
+  // drei Tiefenschichten -> starker Parallaxe-Effekt beim Fliegen
+  const near = makeStarLayer(1600, 180, 520, 3.4, sprite, 0.45);
+  const mid  = makeStarLayer(3200, 520, 1200, 2.1, sprite, 0.35);
+  const far  = makeStarLayer(4200, 1200, 2600, 1.3, sprite, 0.28);
+  starLayers = [near, mid, far];
+  starLayers.forEach(l => scene.add(l));
+  starfield = mid; // Kompatibilität
+
+  // helle, individuell funkelnde Sterne (eigener Twinkle-Shader)
+  const N = 180;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), ph = new Float32Array(N);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const r = 450 + Math.random() * 950;
+    const th = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1);
+    pos[i * 3] = r * Math.sin(phi) * Math.cos(th);
+    pos[i * 3 + 1] = r * Math.cos(phi);
+    pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(th);
+    const pick = Math.random();
+    tmp.copy(pick > 0.86 ? COL.cyan : pick > 0.7 ? COL.violet : COL.white).multiplyScalar(0.7 + Math.random() * 0.5);
+    col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+    ph[i] = Math.random();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aPhase', new THREE.BufferAttribute(ph, 1));
+  starMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uMap: { value: sprite }, uSize: { value: 9.0 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `
+      attribute float aPhase; attribute vec3 aColor; varying vec3 vColor; varying float vTw;
+      uniform float uTime, uSize;
+      void main(){
+        vColor = aColor;
+        float tw = 0.45 + 0.55 * sin(uTime * 2.2 + aPhase * 6.2831853);
+        vTw = max(tw, 0.12);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = uSize * vTw * (320.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uMap; varying vec3 vColor; varying float vTw;
+      void main(){ vec4 t = texture2D(uMap, gl_PointCoord); if (t.a < 0.02) discard; gl_FragColor = vec4(vColor * vTw, t.a * vTw); }`,
+  });
+  starsBright = new THREE.Points(geo, starMat);
   scene.add(starsBright);
 }
 
+/* ---- Vordergrund-Sternenstaub: driftet mit der Kamera (Tiefen-Parallaxe) ---- */
+function buildStardust(sprite) {
+  const N = 240;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * 80;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 80;
+    tmp.copy(Math.random() > 0.5 ? COL.cyan : COL.violet).multiplyScalar(0.25 + Math.random() * 0.35);
+    col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  stardust = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 0.5, map: sprite, vertexColors: true, transparent: true, opacity: 0.6,
+    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+  }));
+  scene.add(stardust);           // folgt der Kamera pro Frame (siehe animate)
+}
+
+/* ---- Sternschnuppe: heller Kopf mit verblassendem Schweif ---- */
+function spawnComet() {
+  const SEG = 18;
+  const start = new THREE.Vector3(
+    (Math.random() - 0.5) * 1400, 200 + Math.random() * 500, (Math.random() - 0.5) * 1400
+  );
+  const dir = new THREE.Vector3((Math.random() - 0.5), -0.4 - Math.random() * 0.5, (Math.random() - 0.5)).normalize();
+  const speed = 420 + Math.random() * 320;
+  const pos = new Float32Array(SEG * 3);
+  for (let i = 0; i < SEG; i++) { pos[i * 3] = start.x; pos[i * 3 + 1] = start.y; pos[i * 3 + 2] = start.z; }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const line = new THREE.Line(geo, mat);
+  line.layers.set(LAYER_BG);
+  scene.add(line);
+  comets.push({ line, head: start.clone(), dir, speed, t: 0, life: 2.2, seg: SEG });
+}
+function updateComets(dt) {
+  cometTimer -= dt;
+  if (cometTimer <= 0 && comets.length < 2) { spawnComet(); cometTimer = 4 + Math.random() * 6; }
+  for (let i = comets.length - 1; i >= 0; i--) {
+    const c = comets[i];
+    c.t += dt;
+    c.head.addScaledVector(c.dir, c.speed * dt);
+    const arr = c.line.geometry.attributes.position.array;
+    // Schweif nachziehen
+    for (let s = c.seg - 1; s > 0; s--) {
+      arr[s * 3] = arr[(s - 1) * 3]; arr[s * 3 + 1] = arr[(s - 1) * 3 + 1]; arr[s * 3 + 2] = arr[(s - 1) * 3 + 2];
+    }
+    arr[0] = c.head.x; arr[1] = c.head.y; arr[2] = c.head.z;
+    c.line.geometry.attributes.position.needsUpdate = true;
+    c.line.material.opacity = Math.max(0, 0.9 * (1 - c.t / c.life));
+    if (c.t >= c.life) {
+      scene.remove(c.line); c.line.geometry.dispose(); c.line.material.dispose(); comets.splice(i, 1);
+    }
+  }
+}
+
 /* ---- Nebel: große, sehr dezente, farbige Wolken weit außen ---- */
-function buildNebula(sprite) {
+function buildNebula() {
   nebula = new THREE.Group();
-  const clouds = [
-    { c: '#5a3fb0', s: 620, p: [-650, 180, -900], o: 0.12 },
-    { c: '#2f7fae', s: 720, p: [780, -120, -1000], o: 0.10 },
-    { c: '#7a4bd0', s: 520, p: [200, 420, -1200], o: 0.09 },
-    { c: '#1f5f8f', s: 600, p: [-400, -360, 1100], o: 0.08 },
-  ];
-  clouds.forEach(cl => {
-    const mat = new THREE.SpriteMaterial({
-      map: sprite, color: new THREE.Color(cl.c), transparent: true,
-      opacity: cl.o, blending: THREE.AdditiveBlending, depthWrite: false,
+  const tex = makeNebulaTexture();
+  const colors = ['#3a2d8f', '#2f5fae', '#7a4bd0', '#1f4f8f', '#b5532a', '#5a3fb0', '#244a9a', '#6a3da0'];
+  const COUNT = 18;
+  for (let i = 0; i < COUNT; i++) {
+    const baseOpacity = 0.04 + Math.random() * 0.07;
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, color: new THREE.Color(colors[i % colors.length]), transparent: true,
+      opacity: baseOpacity, blending: THREE.AdditiveBlending,
+      depthWrite: false, side: THREE.DoubleSide,
     });
-    const sp = new THREE.Sprite(mat);
-    sp.position.set(cl.p[0], cl.p[1], cl.p[2]);
-    sp.scale.setScalar(cl.s);
-    nebula.add(sp);
-  });
+    mat.toneMapped = false;
+    const size = 130 + Math.random() * 280;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    m.userData.baseOpacity = baseOpacity;
+    // im Volumen verteilen (auch in Bandnähe -> man fliegt hindurch)
+    const r = 90 + Math.random() * 540;
+    const th = Math.random() * Math.PI * 2;
+    m.position.set(Math.cos(th) * r, (Math.random() - 0.5) * 320, Math.sin(th) * r);
+    m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    m.userData.spin = (Math.random() - 0.5) * 0.03;
+    nebula.add(m);
+  }
   scene.add(nebula);
 }
 
@@ -314,52 +511,50 @@ function diskColor(t) {
   else c.copy(mid).lerp(outer, (t - 0.5) / 0.5);
   return c;
 }
-function buildDisk(sprite) {
-  const N = 13000;
-  const pos = new Float32Array(N * 3);
-  const col = new Float32Array(N * 3);
-  const tmp = new THREE.Color();
-  const dopplerPhase = Math.PI * 0.5;
-
-  for (let i = 0; i < N; i++) {
-    const tr = Math.pow(Math.random(), 0.7);
-    const r = DISK_INNER + (DISK_OUTER - DISK_INNER) * tr;
-    const ang = Math.random() * Math.PI * 2;
-    // sehr flache Scheibe (cinematic)
-    const thick = (0.08 + tr * 0.45) * (Math.random() + Math.random() + Math.random() - 1.5);
-    pos[i * 3]     = Math.cos(ang) * r;
-    pos[i * 3 + 1] = thick;
-    pos[i * 3 + 2] = Math.sin(ang) * r;
-
-    tmp.copy(diskColor(tr));
-    // Doppler-Beaming (1 + cos): eine Seite heller -> aber insgesamt gedämpft
-    const beam = 0.28 + 0.6 * (0.5 + 0.5 * Math.cos(ang - dopplerPhase));
-    const flick = 0.8 + Math.random() * 0.3;
-    tmp.multiplyScalar(beam * flick * 0.6);
-    col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const mat = new THREE.PointsMaterial({
-    size: 0.9, map: sprite, vertexColors: true, transparent: true,
-    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
-    opacity: 0.6,
+function buildDisk() {
+  // Akkurate Akkretionsscheibe als EINE Shader-Fläche (kein Partikel-Stacking
+  // -> kein Ausbrennen). Temperaturgradient, Doppler-Beaming, FBM-Turbulenz.
+  const geo = new THREE.RingGeometry(DISK_INNER, DISK_OUTER, 320, 16);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: { uTime: { value: 0 }, uInner: { value: DISK_INNER }, uOuter: { value: DISK_OUTER } },
+    vertexShader: `
+      varying vec2 vP;
+      void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      precision highp float;
+      varying vec2 vP; uniform float uTime, uInner, uOuter;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+      float noise(vec2 p){ vec2 i=floor(p), f=fract(p); float a=hash(i),b=hash(i+vec2(1.,0.)),c=hash(i+vec2(0.,1.)),d=hash(i+vec2(1.,1.)); vec2 u=f*f*(3.-2.*f); return mix(mix(a,b,u.x),mix(c,d,u.x),u.y); }
+      float fbm(vec2 p){ float v=0.,a=.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.02; a*=.5; } return v; }
+      void main(){
+        float r = length(vP);
+        float t = clamp((r - uInner) / (uOuter - uInner), 0.0, 1.0);
+        float ang = atan(vP.y, vP.x);
+        // wirbelnde Spiralturbulenz (innen schneller via log(r))
+        float spiral = ang*1.5 - log(r)*3.5 + uTime*0.7;
+        float dust = fbm(vec2(spiral*1.1, r*0.16 + uTime*0.05));
+        dust = 0.2 + 0.95*dust;
+        // Temperatur: weiß-heiß innen -> gelb-orange -> tiefrot außen
+        vec3 white=vec3(1.0,0.98,0.95), gold=vec3(1.0,0.72,0.32), orange=vec3(1.0,0.4,0.12), cool=vec3(0.4,0.07,0.03);
+        vec3 col;
+        if (t<0.18) col = mix(white, gold, t/0.18);
+        else if (t<0.5) col = mix(gold, orange, (t-0.18)/0.32);
+        else col = mix(orange, cool, (t-0.5)/0.5);
+        // Doppler-Beaming: eine Seite heller & bläulicher
+        float beam = 0.4 + 1.0*(0.5+0.5*cos(ang - 1.5708));
+        col = mix(col, col*vec3(0.82,0.9,1.3), clamp(beam-0.95,0.0,0.6));
+        // heller Innenrand, weiche Kanten; außen ätherisch ausdünnen
+        float edge = smoothstep(0.0,0.04,t) * (1.0 - smoothstep(0.55,1.0,t));
+        float inner = pow(1.0-t, 1.7)*1.7 + 0.22;
+        float bright = inner * beam * dust * edge;
+        float alpha = edge * (0.4 + 0.55*dust) * (0.5 + 0.5*(1.0-t));
+        gl_FragColor = vec4(col * bright, alpha);
+      }`,
   });
-  disk = new THREE.Points(geo, mat);
-  disk.rotation.x = 0; // Scheibe in der XZ-Ebene (Blick leicht schräg von oben)
+  disk = new THREE.Mesh(geo, mat);
+  disk.rotation.x = -Math.PI / 2;   // flach in die XZ-Ebene (Äquator)
   scene.add(disk);
-
-  // Unsichtbarer Tiefen-Occluder: flaches Ellipsoid, das die zentrale
-  // Scheiben-/Loch-Region abbildet -> Karten DAHINTER werden verdeckt.
-  // (Ein hauchdünner Ring würde die Sichtlinien zu den Karten nie schneiden.)
-  diskOccluder = new THREE.Mesh(
-    new THREE.SphereGeometry(DISK_OUTER * 0.96, 40, 28),
-    new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true })
-  );
-  diskOccluder.scale.set(1, 0.4, 1);           // abgeflacht -> Scheibenprofil
-  diskOccluder.layers.set(LAYER_OCCLUDE);      // nur im Tiefen-Pass
-  scene.add(diskOccluder);
 }
 
 /* ---- Schwarzes Loch: tiefschwarzer Kern + dezenter Rand/Photon-Ring ---- */
@@ -369,7 +564,6 @@ function buildBlackHole() {
     new THREE.MeshBasicMaterial({ color: 0x000000 })
   );
   horizon.name = 'blackhole';
-  horizon.layers.enable(LAYER_OCCLUDE); // zusätzlich für den Tiefen-Pass der Karten
   scene.add(horizon);
 
   // dezenter Fresnel-Rand (Lichtsaum)
@@ -396,9 +590,10 @@ function buildBlackHole() {
 
   // schmaler Photon-/Einstein-Ring (zur Kamera ausgerichtet)
   photonRing = new THREE.Mesh(
-    new THREE.TorusGeometry(BH_RADIUS * 1.12, 0.06, 14, 180),
-    new THREE.MeshBasicMaterial({ color: 0xc9b48a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    new THREE.TorusGeometry(BH_RADIUS * 1.14, 0.16, 18, 220),
+    new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false })
   );
+  photonRing.material.toneMapped = false; // bleibt hell -> intensiver Glüh-Akzent (Einstein-Ring)
   scene.add(photonRing);
 }
 
@@ -603,15 +798,15 @@ function makeCardMesh(project) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-  const h = 7.0, w = h * (CW / CH);
+  const h = 11.0, w = h * (CW / CH);
   const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true });
   mat.toneMapped = false;
-  mat.depthWrite = false; // verhindert Z-Fighting/Flackern zwischen überlappenden Karten
-  // (Verdeckung durch Loch/Scheibe via depthTest gegen den Tiefen-Pass bleibt erhalten)
+  mat.depthWrite = true;  // in der Hauptszene: korrekt vom Loch/Karten verdeckt (echtes Layering)
+  mat.alphaTest = 0.05;   // transparente Ecken nicht in den Tiefenpuffer schreiben
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   mesh.userData.project = project;
-  mesh.layers.set(LAYER_CARDS);  // lens-immun (eigener Render-Pass)
   mesh.visible = false;          // erscheinen erst nach der Supernova
+  // kein renderOrder: Three sortiert transparente Objekte korrekt nach Distanz
 
   if (project.image) {
     const im = new Image();
@@ -640,12 +835,23 @@ async function buildCards() {
     const y = Math.sin(lat) * DOME_R;
     const rr = Math.cos(lat) * DOME_R;
     const base = new THREE.Vector3(Math.cos(az) * rr, y, Math.sin(az) * rr);
-    const card = { mesh, base, baseScale: 1 };
+    const card = { mesh, base, baseScale: 1, revealT: 0 };
     mesh.position.copy(base);
     mesh.userData.card = card;
     cards.push(card);
     scene.add(mesh);
   });
+  if (counterEl) counterEl.textContent = '◍ ' + projects.length + ' systems mapped';
+
+  // EIN geteilter Glow-Halo (folgt der aktiven Karte) – spart 39 additive Planes
+  const gMat = new THREE.MeshBasicMaterial({
+    map: spriteTex, color: new THREE.Color('#a67cff'), transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  });
+  gMat.toneMapped = false;
+  cardGlow = new THREE.Mesh(new THREE.PlaneGeometry(16, 19), gMat);
+  cardGlow.visible = false;
+  scene.add(cardGlow);
 }
 
 function buildScene() {
@@ -667,8 +873,8 @@ function buildScene() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
   controls.enablePan = false;
-  controls.minDistance = 12;
-  controls.maxDistance = 420;
+  controls.minDistance = 16;
+  controls.maxDistance = 700;
   controls.autoRotateSpeed = 0.3;
   controls.target.set(0, 0, 0);
   controls.enabled = false; // Start im Dome-Modus (Free-Look)
@@ -679,16 +885,17 @@ function buildScene() {
   const sprite = makeSpriteTexture();
   spriteTex = sprite;
   buildStarfield(sprite);
-  buildNebula(sprite);
+  buildNebula();
   buildBlackHole();
-  buildDisk(sprite);
+  buildDisk();
   buildOrbiters(sprite);
+  buildStardust(sprite);
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.55, 0.5, 0.4 // strength, radius, threshold -> dezent
+    0.62, 0.5, 0.42 // strength, radius, threshold -> Innenrand & Photonenring glühen, ohne auszubrennen
   );
   composer.addPass(bloomPass);
   // Gravitations-Lensing als letzter Pass
@@ -715,9 +922,14 @@ function applyFlyRotation() {
 function onKeyDown(e) {
   if (!overlay.classList.contains('is-open')) return;
   if (introActive && e.key !== 'Escape') { skipIntro(); return; }
+  lastInput = performance.now();
   const k = e.key.toLowerCase();
   if (['w', 'a', 's', 'd', ' '].includes(k) || ['shift'].includes(k)) {
-    if (viewMode === 'inside' && !focused && !spaghetti) { fly.keys.add(k); e.preventDefault(); }
+    if (!focused && !spaghetti) { fly.keys.add(k); dismissHelpSoon(); e.preventDefault(); } // WASD in beiden Modi
+  }
+  // E / Enter: ins Fadenkreuz genommene Karte fokussieren (Dome-Modus)
+  if ((k === 'e' || e.key === 'Enter') && viewMode === 'inside' && !focused && !spaghetti && reticleCard) {
+    focusCard(reticleCard); e.preventDefault();
   }
   if (e.key === 'Escape') {
     if (spaghetti) resetSpaghetti();
@@ -727,20 +939,49 @@ function onKeyDown(e) {
 }
 function onKeyUp(e) { fly.keys.delete(e.key.toLowerCase()); }
 
-function applyFlyMovement(dt) {
-  if (viewMode !== 'inside' || focused || spaghetti) return;
-  const speed = 34 * dt;
-  const fwd = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
-  const right = new THREE.Vector3(1, 0, 0).applyEuler(camera.rotation);
+// Hilfe-Hinweis nach der ersten aktiven Bewegung weich ausblenden
+function dismissHelpSoon() {
+  if (helpDismissed) return;
+  helpDismissed = true;
+  setTimeout(() => { if (helpEl) helpEl.classList.add('is-hidden'); }, 1000);
+}
+
+// Raumschiff-Physik: Beschleunigung + Trägheit/Drift (in beiden Modi)
+const FLY_ACCEL = 135, FLY_DAMP = 0.96, FLY_MAX = 78;
+function applyMovement(dt) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
   const up = new THREE.Vector3(0, 1, 0);
-  const move = new THREE.Vector3();
-  if (fly.keys.has('w')) move.add(fwd);
-  if (fly.keys.has('s')) move.addScaledVector(fwd, -1);
-  if (fly.keys.has('d')) move.add(right);
-  if (fly.keys.has('a')) move.addScaledVector(right, -1);
-  if (fly.keys.has(' ')) move.add(up);
-  if (fly.keys.has('shift')) move.addScaledVector(up, -1);
-  if (move.lengthSq() > 0) camera.position.addScaledVector(move.normalize(), speed);
+  const acc = new THREE.Vector3();
+  if (fly.keys.has('w')) acc.add(fwd);
+  if (fly.keys.has('s')) acc.addScaledVector(fwd, -1);
+  if (fly.keys.has('d')) acc.add(right);
+  if (fly.keys.has('a')) acc.addScaledVector(right, -1);
+  if (fly.keys.has(' ')) acc.add(up);
+  if (fly.keys.has('shift')) acc.addScaledVector(up, -1);
+  if (acc.lengthSq() > 0) fly.vel.addScaledVector(acc.normalize(), FLY_ACCEL * dt);
+  // Dämpfung -> sanftes Ausgleiten (Drift)
+  fly.vel.multiplyScalar(Math.pow(FLY_DAMP, dt * 60));
+  if (fly.vel.length() > FLY_MAX) fly.vel.setLength(FLY_MAX);
+  if (fly.vel.lengthSq() < 1e-5) { fly.vel.set(0, 0, 0); return; }
+  const delta = fly.vel.clone().multiplyScalar(dt);
+  camera.position.add(delta);
+  if (viewMode === 'outside') controls.target.add(delta); // mitführen, damit Orbit erhalten bleibt
+}
+function updateFly(dt) {
+  // Rotation mit Momentum (Trägheit nach dem Loslassen)
+  if (!isDown) {
+    fly.yaw += fly.yawVel; fly.pitch += fly.pitchVel;
+    fly.yawVel *= 0.9; fly.pitchVel *= 0.9;
+  }
+  // Idle: nach Inaktivität sanftes kinoreifes Weiterdriften
+  if (performance.now() - lastInput > 6000 && fly.keys.size === 0 && !isDown && fly.vel.lengthSq() < 1) {
+    fly.yaw += dt * 0.05;
+    fly.pitch += Math.sin(elapsed * 0.25) * dt * 0.02;
+  }
+  fly.pitch = Math.max(-1.35, Math.min(1.35, fly.pitch));
+  applyFlyRotation();
+  applyMovement(dt);
 }
 
 /* ---- Interaktion (Hover / Klick) ---- */
@@ -754,19 +995,24 @@ function intersectCards() {
   return raycaster.intersectObjects(cards.map(c => c.mesh), false);
 }
 function onPointerMove(ev) {
+  if (isDown) dismissHelpSoon();
   if (isDown && viewMode === 'inside' && !focused && !spaghetti) {
     const dx = ev.clientX - lastX, dy = ev.clientY - lastY;
     if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > 3) dragging = true;
-    fly.yaw -= dx * 0.0028;
-    fly.pitch = Math.max(-1.35, Math.min(1.35, fly.pitch - dy * 0.0028));
+    fly.yaw -= dx * 0.0026;
+    fly.pitch = Math.max(-1.35, Math.min(1.35, fly.pitch - dy * 0.0026));
+    fly.yawVel = -dx * 0.0026; fly.pitchVel = -dy * 0.0026; // Momentum für weichen Auslauf
     lastX = ev.clientX; lastY = ev.clientY;
+    lastInput = performance.now();
   }
   setPointer(ev);
 }
 function onPointerDown(ev) {
   if (introActive) { skipIntro(); return; }
   isDown = true; dragging = false;
+  fly.yawVel = 0; fly.pitchVel = 0;
   downX = lastX = ev.clientX; downY = lastY = ev.clientY;
+  lastInput = performance.now();
 }
 function onPointerUp(ev) {
   isDown = false;
@@ -853,6 +1099,23 @@ function hideDetail() {
   detailEl.setAttribute('aria-hidden', 'true');
 }
 
+// Fadenkreuz-Label aktualisieren (Dome-Modus)
+let _reticleState = '';
+function updateReticle(card, onHole) {
+  if (!reticleEl) return;
+  const show = viewMode === 'inside' && !focused && !spaghetti && overlay.classList.contains('is-visible');
+  reticleEl.classList.toggle('is-visible', show);
+  const state = card ? 'card:' + card.mesh.userData.project.title : (onHole ? 'hole' : 'none');
+  if (state === _reticleState) return;
+  _reticleState = state;
+  reticleEl.classList.toggle('is-target', !!card || onHole);
+  if (reticleLabel) {
+    if (card) reticleLabel.textContent = '▸ ' + card.mesh.userData.project.title + '   [E]';
+    else if (onHole) reticleLabel.textContent = '◎ Singularity — click to exit';
+    else reticleLabel.textContent = '';
+  }
+}
+
 /* ---- Easter Egg: Spaghettisierung ---- */
 function triggerSpaghetti() {
   if (spaghetti) return;
@@ -901,13 +1164,23 @@ function resetSpaghetti() {
 function animate() {
   animId = requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
 
-  if (disk) disk.rotation.y += dt * 0.14;
-  if (starfield) starfield.rotation.y += dt * 0.004;
+  if (disk && disk.material.uniforms) disk.material.uniforms.uTime.value = elapsed;
+  for (let i = 0; i < starLayers.length; i++) starLayers[i].rotation.y += dt * (0.006 - i * 0.0018);
   if (starsBright) starsBright.rotation.y += dt * 0.003;
-  if (nebula) nebula.rotation.y += dt * 0.012;
-  if (photonRing) photonRing.quaternion.copy(camera.quaternion);
+  if (starMat) starMat.uniforms.uTime.value = elapsed;           // Funkeln
+  if (nebula) {
+    nebula.rotation.y += dt * 0.012;
+    for (const m of nebula.children) {        // nah an der Kamera ausblenden -> kein Weiß-Wash beim Durchfliegen
+      m.getWorldPosition(_tmpVec);
+      m.material.opacity = m.userData.baseOpacity * THREE.MathUtils.smoothstep(_tmpVec.distanceTo(camera.position), 30, 140);
+    }
+  }
+  if (stardust) { stardust.position.copy(camera.position); stardust.rotation.y += dt * 0.03; } // Vordergrund-Parallaxe
+  if (photonRing) { photonRing.quaternion.copy(camera.quaternion); photonRing.scale.setScalar(1 + Math.sin(elapsed * 1.5) * 0.015); }
   updateNova(dt);
+  updateComets(dt);
 
   // zusätzliche Orbit-Elemente bewegen
   for (const o of orbiters) {
@@ -924,9 +1197,10 @@ function animate() {
 
   // Kamera-Steuerung je nach Modus (Intro/sanfte Fahrten steuern selbst)
   if (!focused && !spaghetti && !introActive && !camFlying) {
-    if (viewMode === 'inside') { applyFlyMovement(dt); applyFlyRotation(); }
-    else { controls.update(); }
+    if (viewMode === 'inside') { updateFly(dt); }
+    else { applyMovement(dt); controls.update(); }
   }
+  drawSpeed(fly.vel.length());   // Speed-Streaks bei hohem Tempo
 
   // Gravitations-Lensing aktualisieren
   updateLens();
@@ -958,44 +1232,68 @@ function animate() {
   for (const c of cards) {
     const p = c.base.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), domeAngle);
     const active = (c === hovered || c === focused);
+    const rt = c.revealT;
 
-    // Position: beim Hover ein Stück zur Kamera (Kollision vermeiden);
-    // beim Fokus bleibt die Karte ruhig, die Kamera fliegt zu ihr
+    // Position: beim Hover ein Stück zur Kamera; beim Fokus ruhig (Kamera fliegt hin)
     let target = p;
     if (c === hovered && !focused) {
       const toCam = camera.position.clone().sub(p).normalize();
       target = p.clone().addScaledVector(toCam, 10);
     }
-    c.mesh.position.lerp(target, 0.16);
+    // elegantes Einschweben: aus der Zentralregion nach außen
+    if (rt < 1) target = p.clone().multiplyScalar(0.18).lerp(target, rt);
+    c.mesh.position.lerp(target, rt < 1 ? 0.5 : 0.16);
 
-    // Ausrichtung (Object3D.lookAt richtet bei Meshes die +Z-Front ZUM Ziel):
-    //   Standard -> Blick zum Zentrum (Karte schaut das Schwarze Loch an)
-    //   aktiv    -> Active-Flip zur Kamera (Text lesbar, nicht gespiegelt)
+    // Ausrichtung: Standard -> Blick zum Zentrum; aktiv -> Flip zur Kamera (lesbar)
     if (active) { dummy.position.copy(c.mesh.position); dummy.lookAt(camera.position); }
     else        { dummy.position.copy(p);               dummy.lookAt(center); }
     c.mesh.quaternion.slerp(dummy.quaternion, active ? 0.18 : 0.12);
 
-    const ts = active ? c.baseScale * 1.6 : c.baseScale;
-    c.mesh.scale.lerp(dummy.scale.set(ts, ts, ts), 0.16);
+    const ts = (active ? c.baseScale * 1.6 : c.baseScale) * (rt < 1 ? rt : 1);
+    c.mesh.scale.lerp(dummy.scale.set(ts, ts, ts), rt < 1 ? 0.5 : 0.16);
+  }
+
+  // EIN Glow folgt der aktiven Karte (Hover/Fokus = violett, Fadenkreuz = cyan)
+  if (cardGlow) {
+    const gc = hovered || focused || reticleCard;
+    const targetO = (hovered || focused) ? 0.6 : (reticleCard ? 0.32 : 0);
+    if (gc) {
+      cardGlow.visible = true;
+      // leicht hinter die Karte (von der Kamera weg) -> Halo um die Ränder
+      const away = gc.mesh.position.clone().sub(camera.position).normalize();
+      cardGlow.position.copy(gc.mesh.position).addScaledVector(away, 0.4);
+      cardGlow.quaternion.copy(gc.mesh.quaternion);
+      const gs = gc.mesh.scale.x;
+      cardGlow.scale.set(gs, gs, gs);
+      cardGlow.material.color.set((hovered || focused) ? '#a67cff' : '#70d6ff');
+    }
+    cardGlow.material.opacity += (targetO - cardGlow.material.opacity) * 0.15;
+    if (cardGlow.material.opacity < 0.01 && !gc) cardGlow.visible = false;
   }
 
   if (focused && !camFlying) camera.lookAt(focused.mesh.position);
 
-  // --- Rendering ---
-  // 1) Hintergrund + Loch + Scheibe inkl. Gravitations-Lensing
-  camera.layers.set(LAYER_BG);
+  // Fadenkreuz-Ziel (Dome-Modus): zeigt Projekt oder Singularität in der Bildmitte
+  if (viewMode === 'inside' && !focused && !spaghetti && !introActive && !camFlying && cardsRevealed) {
+    raycaster.setFromCamera(CENTER2, camera);
+    const rHits = raycaster.intersectObjects(cards.map(c => c.mesh), false);
+    const bhHit = raycaster.intersectObject(horizon, false);
+    const cardFirst = rHits.length && (!bhHit.length || rHits[0].distance < bhHit[0].distance);
+    reticleCard = cardFirst ? rHits[0].object.userData.card : null;
+    updateReticle(reticleCard, !cardFirst && bhHit.length > 0);
+  } else {
+    reticleCard = null;
+    updateReticle(null, false);
+  }
+
+  // sanftes FOV: leichtes Hineinzoomen beim Fokus
+  if (!spaghetti) {
+    const tf = focused ? 50 : 58;
+    if (Math.abs(camera.fov - tf) > 0.05) { camera.fov += (tf - camera.fov) * 0.08; camera.updateProjectionMatrix(); }
+  }
+
+  // --- Rendering: eine Szene, korrektes Tiefen-Layering (Karten ↔ Loch/Nebel/Partikel) ---
   composer.render();
-  // 2) Karten lens-immun & scharf darüber, aber vom Loch (Tiefe) verdeckt
-  renderer.autoClear = false;
-  renderer.clearDepth();
-  camera.layers.set(LAYER_OCCLUDE);   // Horizont NUR in den Tiefenpuffer (keine Farbe)
-  horizon.material.colorWrite = false;
-  renderer.render(scene, camera);
-  horizon.material.colorWrite = true;
-  camera.layers.set(LAYER_CARDS);     // Karten scharf obenauf
-  renderer.render(scene, camera);
-  renderer.autoClear = true;
-  camera.layers.set(LAYER_BG);
 }
 function startLoop() { if (!running) { running = true; clock.getDelta(); animate(); } }
 function stopLoop()  { running = false; if (animId) cancelAnimationFrame(animId); animId = null; }
@@ -1006,6 +1304,7 @@ function onResize() {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  sizeSpeedCanvas();
 }
 
 /* ================================================================
@@ -1025,7 +1324,7 @@ function openOverlay() {
   if (loadingEl) loadingEl.classList.remove('is-hidden');
 }
 function revealOverlay() {
-  requestAnimationFrame(() => overlay.classList.add('is-visible'));
+  setTimeout(() => overlay.classList.add('is-visible'), 20);
   if (loadingEl) setTimeout(() => loadingEl.classList.add('is-hidden'), 400);
 }
 function closeOverlay() {
@@ -1035,72 +1334,99 @@ function closeOverlay() {
 }
 
 /* ---- Cinematischer Anflug nach dem Warp ---- */
-const INTRO_LOOK = new THREE.Vector3(80, 2, 0); // Blick nach außen aufs Karten-Band
+const INTRO_LOOK = new THREE.Vector3(130, 4, 0); // Blick nach außen aufs Karten-Band
 function setCameraIntroStart() {
   introActive = true;
   const ang = Math.PI * 0.15;
-  camera.position.set(Math.cos(ang) * 300, 92, Math.sin(ang) * 300);
+  camera.position.set(Math.cos(ang) * 460, 140, Math.sin(ang) * 460);
   camera.lookAt(center);
 }
 function revealCardsInstant() {
   cardsRevealed = true;
-  cards.forEach(c => { c.mesh.visible = true; c.mesh.material.opacity = 1; c.mesh.scale.setScalar(c.baseScale); });
+  cards.forEach(c => { c.mesh.visible = true; c.revealT = 1; c.mesh.material.opacity = 1; c.mesh.scale.setScalar(c.baseScale); });
 }
 function revealCards() {
   return new Promise((resolve) => {
     cardsRevealed = true;
     if (reduceMotion || !window.gsap) { revealCardsInstant(); resolve(); return; }
+    // elegant nacheinander aus der Zentralregion nach außen einschweben
     cards.forEach((c, i) => {
       c.mesh.visible = true;
+      c.revealT = 0;
       c.mesh.material.opacity = 0;
-      c.mesh.scale.setScalar(0.01);                 // wächst über den animate-Lerp hoch
-      gsap.to(c.mesh.material, { opacity: 1, duration: 0.7, delay: 0.05 + i * 0.012, ease: 'power2.out' });
+      const delay = 0.1 + i * 0.05;
+      gsap.to(c, { revealT: 1, duration: 1.3, delay, ease: 'power3.out' });
+      gsap.to(c.mesh.material, { opacity: 1, duration: 0.9, delay, ease: 'power2.out' });
     });
-    setTimeout(resolve, 480);
+    setTimeout(resolve, 700); // weiterlaufen lassen, während die Karten einschweben
   });
 }
 
 /* ---- Supernova: gewaltiger Blitz + Schockwelle, kurz vor Ende des Anflugs ---- */
+function makeShockRing(color, tilt) {
+  const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const r = new THREE.Mesh(new THREE.RingGeometry(1, 1.35, 96), m);
+  r.rotation.x = Math.PI / 2 + tilt;
+  r.layers.set(LAYER_BG);
+  scene.add(r);
+  return r;
+}
 function supernova() {
-  // greller, expandierender Kern
-  const fMat = new THREE.MeshBasicMaterial({ color: 0xfff1d4, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), fMat);
-  flash.layers.set(LAYER_BG);
-  scene.add(flash);
-  // expandierende Schockwelle
-  const sMat = new THREE.MeshBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const shock = new THREE.Mesh(new THREE.RingGeometry(1, 1.5, 80), sMat);
-  shock.rotation.x = Math.PI / 2 + 0.35;
-  shock.layers.set(LAYER_BG);
-  scene.add(shock);
-
   spawnNovaParticles(); // gewaltiger Partikel-Ausbruch
+  if (!window.gsap) return;
 
-  if (window.gsap) {
-    gsap.to(flash.scale, { x: 170, y: 170, z: 170, duration: 1.1, ease: 'power2.out' });
-    gsap.to(fMat, { opacity: 0, duration: 1.25, ease: 'power2.in', onComplete: () => { scene.remove(flash); fMat.dispose(); flash.geometry.dispose(); } });
-    gsap.to(shock.scale, { x: 110, y: 110, z: 110, duration: 1.5, ease: 'power2.out' });
-    gsap.to(sMat, { opacity: 0, duration: 1.5, ease: 'power2.in', onComplete: () => { scene.remove(shock); sMat.dispose(); shock.geometry.dispose(); } });
-    if (bloomPass) {
-      const b = bloomPass.strength;
-      gsap.to(bloomPass, { strength: 2.4, duration: 0.35, ease: 'power2.out', onComplete: () => gsap.to(bloomPass, { strength: b, duration: 1.1 }) });
-    }
-    if (flashEl) gsap.fromTo(flashEl, { opacity: 0 }, { opacity: 0.92, duration: 0.16, ease: 'power2.out', onComplete: () => gsap.to(flashEl, { opacity: 0, duration: 0.95, ease: 'power2.in' }) });
-  } else {
-    scene.remove(flash); scene.remove(shock);
-  }
+  // greller Kern-Blitz
+  const fMat = new THREE.MeshBasicMaterial({ color: 0xfff6e0, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), fMat);
+  flash.layers.set(LAYER_BG); scene.add(flash);
+  gsap.to(flash.scale, { x: 210, y: 210, z: 210, duration: 1.2, ease: 'power3.out' });
+  gsap.to(fMat, { opacity: 0, duration: 1.35, ease: 'power2.in', onComplete: () => { scene.remove(flash); fMat.dispose(); flash.geometry.dispose(); } });
+
+  // langsam verglühender Kern (Nachglühen -> schönes Ende)
+  const eMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const ember = new THREE.Mesh(new THREE.SphereGeometry(BH_RADIUS * 1.6, 32, 32), eMat);
+  ember.layers.set(LAYER_BG); scene.add(ember);
+  gsap.timeline()
+    .to(eMat, { opacity: 0.55, duration: 0.3, ease: 'power2.out' }, 0)
+    .to(ember.scale, { x: 4.2, y: 4.2, z: 4.2, duration: 2.8, ease: 'power1.out' }, 0)
+    .to(eMat, { opacity: 0, duration: 2.5, ease: 'power2.in', onComplete: () => { scene.remove(ember); eMat.dispose(); ember.geometry.dispose(); } }, 0.4);
+
+  // zwei zeitversetzte Schockwellen (verschiedene Neigung/Farbe)
+  const s1 = makeShockRing(0x9fd4ff, 0.32);
+  gsap.to(s1.scale, { x: 130, y: 130, z: 130, duration: 1.7, ease: 'power2.out' });
+  gsap.to(s1.material, { opacity: 0, duration: 1.7, ease: 'power2.in', onComplete: () => { scene.remove(s1); s1.material.dispose(); s1.geometry.dispose(); } });
+  const s2 = makeShockRing(0xffd9a0, -0.5);
+  gsap.to(s2.scale, { x: 160, y: 160, z: 160, duration: 2.2, delay: 0.28, ease: 'power2.out' });
+  gsap.to(s2.material, { opacity: 0, duration: 2.2, delay: 0.28, ease: 'power2.in', onComplete: () => { scene.remove(s2); s2.material.dispose(); s2.geometry.dispose(); } });
+
+  // Bloom-Spike
+  if (bloomPass) { const b = bloomPass.strength; gsap.to(bloomPass, { strength: 3.0, duration: 0.4, ease: 'power2.out', onComplete: () => gsap.to(bloomPass, { strength: b, duration: 1.3 }) }); }
+  // Voll-Weiß-Blitz
+  if (flashEl) gsap.fromTo(flashEl, { opacity: 0 }, { opacity: 1, duration: 0.14, ease: 'power2.out', onComplete: () => gsap.to(flashEl, { opacity: 0, duration: 1.0, ease: 'power2.in' }) });
+}
+
+// krasses Finale kurz bevor die Karten erscheinen
+function finalFlash() {
+  if (!window.gsap) return;
+  if (bloomPass) { const b = bloomPass.strength; gsap.to(bloomPass, { strength: 3.4, duration: 0.18, ease: 'power2.out', onComplete: () => gsap.to(bloomPass, { strength: b, duration: 0.9 }) }); }
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
+  const pop = new THREE.Mesh(new THREE.SphereGeometry(2, 24, 24), m);
+  pop.layers.set(LAYER_BG); scene.add(pop);
+  gsap.to(pop.scale, { x: 95, y: 95, z: 95, duration: 0.6, ease: 'power3.out' });
+  gsap.to(m, { opacity: 0, duration: 0.7, ease: 'power2.in', onComplete: () => { scene.remove(pop); m.dispose(); pop.geometry.dispose(); } });
+  if (flashEl) gsap.fromTo(flashEl, { opacity: 0 }, { opacity: 0.85, duration: 0.1, onComplete: () => gsap.to(flashEl, { opacity: 0, duration: 0.6 }) });
 }
 
 function spawnNovaParticles() {
-  const N = 1800;
+  const N = 2600;
   const pos = new Float32Array(N * 3);
   const vel = new Float32Array(N * 3);
   const col = new Float32Array(N * 3);
   const tmp = new THREE.Color();
-  const cHot = new THREE.Color('#fff2c0'), cMid = new THREE.Color('#ff8a3a'), cCold = new THREE.Color('#ff2a12');
+  const cHot = new THREE.Color('#fff6d6'), cMid = new THREE.Color('#ff8a3a'), cCold = new THREE.Color('#ff2a12');
   for (let i = 0; i < N; i++) {
     const dir = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
-    const sp = 30 + Math.random() * 120;
+    const sp = 40 + Math.random() * 150;
     pos[i * 3] = dir.x * 2; pos[i * 3 + 1] = dir.y * 2; pos[i * 3 + 2] = dir.z * 2;
     vel[i * 3] = dir.x * sp; vel[i * 3 + 1] = dir.y * sp; vel[i * 3 + 2] = dir.z * sp;
     const c = Math.random();
@@ -1111,14 +1437,14 @@ function spawnNovaParticles() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const mat = new THREE.PointsMaterial({
-    size: 2.6, map: spriteTex, vertexColors: true, transparent: true,
+    size: 3.0, map: spriteTex, vertexColors: true, transparent: true,
     depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, opacity: 1,
   });
   const pts = new THREE.Points(geo, mat);
   pts.layers.set(LAYER_BG);
   scene.add(pts);
   if (novaSystem) { scene.remove(novaSystem.points); novaSystem.points.geometry.dispose(); novaSystem.points.material.dispose(); }
-  novaSystem = { points: pts, vel, t: 0, life: 2.4 };
+  novaSystem = { points: pts, vel, t: 0, life: 2.9 };
 }
 function updateNova(dt) {
   if (!novaSystem) return;
@@ -1142,18 +1468,20 @@ function runIntro() {
   return new Promise((resolve) => {
     let novaFired = false;
     const fireNova = () => { if (!novaFired) { novaFired = true; supernova(); } };
-    const goInside = async () => {
-      await revealCards();                                              // Karten erscheinen NACH der Explosion
-      await flyCameraTo(INSIDE_HOME, INTRO_LOOK, 2.2, 'power2.inOut');  // dann sanft hinein
-      fly.yaw = camera.rotation.y; fly.pitch = camera.rotation.x;
+    const settleOutside = async () => {
+      revealCards();                                              // Karten schweben gestaffelt ein (NACH der Supernova)
+      await flyCameraTo(OUTSIDE_HOME, center, 2.2, 'power2.inOut'); // sanft in die Außen-Überblicksposition
+      controls.target.set(0, 0, 0); controls.enabled = true;
+      viewMode = 'outside'; updateViewButtons();
       introActive = false;
       resolve();
     };
 
     if (reduceMotion || !window.gsap) {
       fireNova(); revealCardsInstant();
-      camera.position.copy(INSIDE_HOME); camera.lookAt(INTRO_LOOK);
-      fly.yaw = camera.rotation.y; fly.pitch = camera.rotation.x;
+      camera.position.copy(OUTSIDE_HOME); camera.lookAt(center);
+      controls.target.set(0, 0, 0); controls.enabled = true;
+      viewMode = 'outside'; updateViewButtons();
       introActive = false; resolve(); return;
     }
 
@@ -1162,7 +1490,7 @@ function runIntro() {
 
     // Phase A: von AUSSEN mehrmals ums Loch kreisen (annähern, aber außen bleiben)
     const turns = 2.0;
-    const startR = 320, endR = 120, startY = 95, endY = 42, startAng = Math.PI * 0.15;
+    const startR = 460, endR = 175, startY = 140, endY = 64, startAng = Math.PI * 0.15;
     const s = { t: 0 };
     introTween = gsap.to(s, {
       t: 1, duration: 3.6, ease: 'power1.inOut',
@@ -1181,23 +1509,29 @@ function runIntro() {
         const hold = { t: 0 };
         const baseAng = startAng + turns * Math.PI * 2;
         introTween = gsap.to(hold, {
-          t: 1, duration: 2.0, ease: 'sine.inOut',
+          t: 1, duration: 2.2, ease: 'sine.inOut',
           onUpdate: () => {
             const ang = baseAng + hold.t * 0.5;
-            camera.position.set(Math.cos(ang) * endR, endY, Math.sin(ang) * endR);
+            const sh = (1 - hold.t) * (1 - hold.t) * 2.2; // Kamera-Shake, klingt ab
+            camera.position.set(
+              Math.cos(ang) * endR + (Math.random() - 0.5) * sh,
+              endY + (Math.random() - 0.5) * sh,
+              Math.sin(ang) * endR + (Math.random() - 0.5) * sh
+            );
             camera.lookAt(center);
           },
-          onComplete: () => { introTween = null; goInside(); },  // Phase C: hinein
+          onComplete: () => { introTween = null; finalFlash(); settleOutside(); },  // Finale -> einschwenken
         });
       },
     });
 
-    // Skip: direkt Supernova -> Karten -> hinein
+    // Skip: direkt Supernova -> Karten -> außen einschwenken
     introFinish = () => {
       if (introTween) { introTween.kill(); introTween = null; }
       introFinish = null;
       fireNova();
-      goInside();
+      finalFlash();
+      settleOutside();
     };
   });
 }
@@ -1225,22 +1559,31 @@ async function enterUniverse() {
   await wait(reduceMotion ? 0 : 260);
 
   openOverlay();
+  helpDismissed = false;
+  if (helpEl) helpEl.classList.remove('is-hidden');
   const ready = initSceneOnce();
   onResize();
-  setViewMode('inside', true);   // setzt u.a. controls.enabled=false (wichtig bei Wiedereintritt)
+  setViewMode('outside', true);  // Start draußen (Orbit-Überblick)
   await Promise.race([runWarp(false), wait(1600)]);
   await Promise.race([ready, wait(3000)]);
   startLoop();
   setCameraIntroStart();      // Kamera weit weg, bevor das Overlay sichtbar wird
   revealOverlay();
   fadeOutWarp();              // Warp blendet weich in die Szene über (Crossfade)
-  await runIntro();           // schneller Anflug -> Supernova -> Karten -> sanft einschwenken
-  busy = false;
+  busy = false;               // ab hier kann der Nutzer interagieren / überspringen / verlassen
+  runIntro();                 // läuft im Hintergrund: Anflug -> Supernova -> Karten -> einschwenken
+}
+
+function cancelIntro() {
+  if (introTween) { introTween.kill(); introTween = null; }
+  introFinish = null;
+  introActive = false;
 }
 
 async function exitToClassic(reverse) {
   if (busy) return;
   busy = true;
+  cancelIntro();
   if (spaghetti) resetSpaghetti();
   if (focused) { focused = null; hideDetail(); }
   if (reverse) await Promise.race([runWarp(true), wait(1500)]);
@@ -1255,6 +1598,7 @@ async function exitToClassic(reverse) {
 async function backToTop() {
   if (busy) return;
   busy = true;
+  cancelIntro();
   if (spaghetti) resetSpaghetti();
   if (focused) { focused = null; hideDetail(); }
   await Promise.race([runWarp(true), wait(1500)]);

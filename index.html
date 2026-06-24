@@ -6,7 +6,7 @@
     <title>Lorenzo Bay-Müller - My personal site. Universe. Physics. Code. Science.</title>
     <meta name="description" content="Portfolio of Lorenzo Bay-Müller, a digital explorer, inventor,  scientist who connects code, physics, and the universe. Discover projects and explorations.">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="universe.css">
+    <link rel="stylesheet" href="universe.css?v=3">
     <meta name="keywords" content="Lorenzo Bay-Müller, Portfolio, Webdevelopment, Python, JavaScript, Physics, Astrophysics, 3D-Printing, Drone, Science, Code, Universe">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,9 +32,9 @@
 </script>
 
 <body>
-    <!-- Direkt nach <body> oder vor </body> -->
-    <!--<div class="cursor-dot"></div>
-    <div class="cursor-trail"></div>-->
+    <!-- Kosmischer Custom-Cursor (Dot + Trail) -->
+    <div class="cursor-dot"></div>
+    <div class="cursor-trail"></div>
 
     <!-- Partikel Hintergrund Container (repräsentiert Sterne/Kosmos) -->
     <div id="particles-js"></div>
@@ -166,6 +166,8 @@
     <!-- 3D Universe Overlay (Three.js Schwarzes Loch) -->
     <div id="universe-overlay" aria-hidden="true" role="dialog" aria-label="Interactive 3D project universe">
         <canvas id="universe-canvas"></canvas>
+        <canvas id="u-speed" class="u-speed" aria-hidden="true"></canvas>
+        <div class="u-vignette" aria-hidden="true"></div>
 
         <div id="u-loading" class="u-loading">
             <div class="u-spinner"></div>
@@ -174,7 +176,7 @@
 
         <!-- Control HUD -->
         <div class="u-hud">
-            <div class="u-hud-brand"><i class="fas fa-meteor" aria-hidden="true"></i> My Universe</div>
+            <div class="u-hud-brand"><i class="fas fa-meteor" aria-hidden="true"></i> My Universe <span id="u-counter" class="u-counter"></span></div>
             <div class="u-hud-group">
                 <div class="u-toggle" role="group" aria-label="Camera view">
                     <button type="button" id="u-view-inside" class="u-toggle-btn is-active" aria-pressed="true">Dome &middot; Inside</button>
@@ -183,6 +185,13 @@
                 <button type="button" id="u-mode-classic" class="u-hud-btn"><i class="fas fa-layer-group" aria-hidden="true"></i> <span>Classic Cards</span></button>
                 <button type="button" id="u-back" class="u-hud-btn"><i class="fas fa-arrow-up" aria-hidden="true"></i> <span>Back to top</span></button>
             </div>
+        </div>
+
+        <!-- Fadenkreuz (Dome-Modus) -->
+        <div class="u-reticle" id="u-reticle" aria-hidden="true">
+            <span class="u-reticle-ring"></span>
+            <span class="u-reticle-dot"></span>
+            <span class="u-reticle-label" id="u-reticle-label"></span>
         </div>
 
         <div class="u-help" id="u-help">
@@ -226,7 +235,7 @@
       }
     }
     </script>
-    <script type="module" src="universe.js"></script>
+    <script type="module" src="universe.js?v=3"></script>
 
     <!-- Fallback: falls das 3D-Modul (CDN) nicht lädt, bleiben die Buttons nutzbar -->
     <script>

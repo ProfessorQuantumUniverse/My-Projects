@@ -191,6 +191,78 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
 }
 #warp-canvas.is-active { display: block; }
 
+/* Projekt-Zähler im HUD */
+.u-counter {
+    font-family: var(--font-secondary);
+    font-size: 0.72rem;
+    color: var(--color-text-secondary);
+    opacity: 0.75;
+    margin-left: 8px;
+}
+
+/* Fadenkreuz (Dome-Modus) */
+.u-reticle {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+.u-reticle.is-visible { opacity: 0.5; }
+.u-reticle.is-target { opacity: 1; }
+.u-reticle-ring {
+    display: block;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(112, 214, 255, 0.7);
+    box-shadow: 0 0 8px rgba(112, 214, 255, 0.35);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.u-reticle.is-target .u-reticle-ring {
+    transform: scale(1.3);
+    border-color: var(--color-accent-secondary);
+    box-shadow: 0 0 14px rgba(112, 214, 255, 0.6);
+}
+.u-reticle-dot {
+    position: absolute; top: 50%; left: 50%;
+    width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px;
+    border-radius: 50%;
+    background: var(--color-accent-secondary);
+    box-shadow: 0 0 6px var(--color-accent-secondary);
+}
+.u-reticle-label {
+    position: absolute; top: calc(50% + 24px); left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-family: var(--font-secondary);
+    font-size: 0.78rem;
+    letter-spacing: 0.5px;
+    color: var(--color-accent-secondary);
+    text-shadow: 0 0 8px rgba(112, 214, 255, 0.5);
+}
+
+/* Speed-Streaks bei hoher Fluggeschwindigkeit */
+.u-speed {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 7;
+    pointer-events: none;
+    mix-blend-mode: screen;
+}
+
+/* Cinematische Vignette über der 3D-Szene */
+.u-vignette {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(2,3,10,0.55) 100%);
+}
+
 /* Supernova-Vollbildblitz (per JS animiert) */
 .u-flash {
     position: absolute;
