@@ -39,8 +39,17 @@ const INSIDE_HOME  = new THREE.Vector3(0, 26, 92);   // Raumschiff-Start: außer
    universum und Tunnel sich gegenseitig nicht sehen (automatische Isolation). */
 const WORMHOLE_ORBIT_R = 150;                         // Umlaufradius des Wurmlochs ums Schwarze Loch
 const TUNNEL_ORIGIN = new THREE.Vector3(0, 0, 20000); // Mittelachse des Karten-Tunnels
-const TUNNEL_LENGTH = 520;                            // Z-Ausdehnung des Tunnels
-const TUNNEL_RADIUS = 42;                             // Helix-Radius der Karten
+const TUNNEL_LENGTH = 3400;                           // sehr langer Galerie-Tunnel (große Abstände zum Erfassen jeder Karte)
+const RING_R = 36;                                    // Abstand der Karten von der Flugachse (Galerie-Wand)
+const CARD_FACE_AHEAD = 50;                           // Karte neigt sich zu diesem Punkt voraus auf der Achse (Galerie-Neigung)
+const CARD_H = 28;                                    // große Galerie-Karten (Höhe in Welteinheiten)
+// Proximity-Reveal: Karten erscheinen erst, wenn das Schiff sich nähert -> nur die nächsten ~2 sichtbar.
+// d = Karten-Z minus Schiff-Z (>0 = noch vor dem Schiff).
+const REVEAL_IN_FAR = 175;                            // ab dieser Distanz VOR dem Schiff taucht eine Karte auf (viel Lesevorlauf)
+const REVEAL_IN_NEAR = 98;                            // ab hier ist sie voll da
+const REVEAL_OUT_NEAR = -8;                           // kurz nach dem Passieren beginnt das Verblassen
+const REVEAL_OUT_FAR = -55;                           // hier ist sie wieder verschwunden
+const CARD_BOTTOM_GAP = 110;                          // gesperrter Bogen unten in Grad (Schiff verdeckt Karten dort)
 
 // Render-Layer: 0 = Hintergrund/Loch/Scheibe (mit Lensing), 1 = Karten
 // (lens-immun, darüber gerendert), 2 = Horizont nur für Verdeckungs-Tiefe
@@ -310,7 +319,10 @@ let exitPortal = null;          // Rückkehr-Portal am Tunnelende
 let exitPortalMat = null;
 let tunnelSkybox = null;        // violette Cubemap fürs Paralleluniversum
 let savedMainBg = null;         // Haupt-Skybox merken (zum Zurücktauschen)
+let savedMainFog = null;        // Haupt-Nebel merken (Tunnel nutzt dichteren Tiefen-Nebel)
 let tunnelLight = null;         // weiches Licht im Karten-Tunnel
+let tunnelShell = null;         // dezente Leuchtringe, die den Tunnel andeuten
+let tunnelGuide = null;         // fließende Leit-Ringe, die zum Ausgang weisen
 let hovered = null;
 let focused = null;
 let spaghetti = false;
@@ -345,6 +357,7 @@ const shipState = {
 const CHASE_OFFSET = new THREE.Vector3(0, 5, 19);     // hinter + über dem Schiff
 const CHASE_STIFFNESS = 6.0;                          // Federhärte der Verfolgerkamera
 const KEY_YAW_RATE = 2.0;                             // rad/s — A/D drehen das Schiff (Gieren statt Seitwärtsgang)
+const KEY_PITCH_RATE = 1.6;                           // rad/s — Pfeil hoch/runter neigen die Nase (Pitch)
 const _shipFwd = new THREE.Vector3();                 // wiederverwendet
 const _shipRight = new THREE.Vector3();
 const _shipUp = new THREE.Vector3();
@@ -1381,18 +1394,27 @@ function applyTunnelState() {
     bgA: '#0a0414', bgB: '#140826', nebula: ['#4a1a6a', '#6a1f8a', '#2a1a5e', '#7a2f9a'], nebAlpha: 0.08,
   });
   scene.background = tunnelSkybox;
+  // Tiefen-Nebel: ferne (noch nicht enthüllte) Bereiche versinken im Dunkel -> Karten tauchen
+  // dramatisch daraus auf. Dezent genug, dass nahe Karten (< ~110u) unberührt bleiben.
+  savedMainFog = scene.fog;
+  scene.fog = new THREE.FogExp2(0x0a0414, 0.0013);
   // Schiff an den Tunneleingang, Blick die Achse entlang (+Z)
   orientShipAt(TUNNEL_ORIGIN.clone().add(new THREE.Vector3(0, 0, -10)),
                TUNNEL_ORIGIN.clone().add(new THREE.Vector3(0, 0, 200)));
-  cards.forEach(c => { c.mesh.visible = true; c.revealT = 1; c.mesh.material.opacity = 1; c.mesh.scale.setScalar(c.baseScale); });
+  // Karten starten verborgen – das Proximity-Reveal in animate() blendet sie je nach Schiffsposition ein.
+  cards.forEach(c => { c.mesh.visible = false; c.revealT = 0; c.mesh.material.opacity = 0; c.mesh.scale.setScalar(c.baseScale * 0.82); });
   cardsRevealed = true;
   if (tunnelLight) tunnelLight.intensity = 1.6;
+  if (tunnelShell) tunnelShell.visible = true;
+  if (tunnelGuide) tunnelGuide.visible = true;
   if (exitPortal) exitPortal.visible = true;
   if (wormhole) wormhole.visible = false;
   if (starmapInfo) starmapInfo.textContent = 'Karten-Tunnel · zum Ausgangsportal fliegen';
 }
 function applyMainState() {
   if (savedMainBg) scene.background = savedMainBg;
+  if (savedMainFog) scene.fog = savedMainFog;          // Haupt-Nebel wiederherstellen
+
   wormhole.getWorldPosition(wormholeWorldPos);
   // Schiff knapp außerhalb des Wurmlochs absetzen (Richtung vom Zentrum weg), Blick zum Zentrum
   const outward = _tmpVec.copy(wormholeWorldPos).setY(0);
@@ -1402,6 +1424,8 @@ function applyMainState() {
   orientShipAt(spawn, center);
   cards.forEach(c => { c.mesh.visible = false; });
   if (tunnelLight) tunnelLight.intensity = 0;
+  if (tunnelShell) tunnelShell.visible = false;
+  if (tunnelGuide) tunnelGuide.visible = false;
   if (exitPortal) exitPortal.visible = false;
   if (wormhole) wormhole.visible = true;
 }
@@ -1656,9 +1680,9 @@ function makeCardMesh(project) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-  const h = 11.0, w = h * (CW / CH);
+  const h = CARD_H, w = h * (CW / CH);
   const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true });
-  mat.toneMapped = false;
+  mat.toneMapped = true;   // ACES dämpft die hellen Pixel -> Text brennt nicht mehr im Bloom aus (lesbar)
   mat.depthWrite = true;  // in der Hauptszene: korrekt vom Loch/Karten verdeckt (echtes Layering)
   mat.alphaTest = 0.05;   // transparente Ecken nicht in den Tiefenpuffer schreiben
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
@@ -1682,19 +1706,26 @@ async function buildCards() {
     projects = await res.json();
   } catch (e) { projects = []; }
 
-  // Karten-Tunnel: Helix entlang der Tunnelachse (im Paralleluniversum hinterm Wurmloch).
-  // Jede Karte sitzt an der "Wand" und blickt nach innen auf die Flugachse.
+  // Karten-Tunnel: Karten sitzen gleichmäßig rund um die Flugachse auf festem Radius – jedoch NICHT
+  // unten (dort verdeckt das Schiff sie). Der Winkel läuft als 1D-Low-Discrepancy-Folge (goldener
+  // Schnitt) über den erlaubten oberen/seitlichen Bogen -> maximal gleichmäßig, kein Klumpen, kein
+  // Spiralband. Jede Karte neigt sich nach innen/voraus und bleibt aufrecht (Y im faceTarget).
   const N = projects.length || 1;
-  const REVS = 3.0;                    // Helix-Windungen über die Tunnellänge
+  const PHI = 0.6180339887498949;                        // goldener Schnitt -> gleichmäßige 1D-Folge
+  const gap = THREE.MathUtils.degToRad(CARD_BOTTOM_GAP); // gesperrter Bogen unten
+  const arc = Math.PI * 2 - gap;                         // erlaubter Bogen (oben + seitlich)
+  const startAng = -Math.PI / 2 + gap / 2;              // am Rand des unteren Gaps beginnen
   projects.forEach((p, i) => {
     const mesh = makeCardMesh(p);
-    const t = N > 1 ? i / (N - 1) : 0.5;                 // 0..1 entlang des Tunnels
+    const t = N > 1 ? i / (N - 1) : 0.5;                 // 0..1 entlang des Tunnels (gleichmäßiger Z-Abstand)
     const z = TUNNEL_ORIGIN.z + 40 + t * TUNNEL_LENGTH;
-    const ang = t * REVS * Math.PI * 2;
-    const x = TUNNEL_ORIGIN.x + Math.cos(ang) * TUNNEL_RADIUS;
-    const y = TUNNEL_ORIGIN.y + Math.sin(ang) * TUNNEL_RADIUS;
+    const ang = startAng + ((i * PHI) % 1) * arc;        // gleichmäßig über den erlaubten Bogen, nie unten
+    const x = TUNNEL_ORIGIN.x + Math.cos(ang) * RING_R;
+    const y = TUNNEL_ORIGIN.y + Math.sin(ang) * RING_R;
     const base = new THREE.Vector3(x, y, z);
-    const faceTarget = new THREE.Vector3(TUNNEL_ORIGIN.x, TUNNEL_ORIGIN.y, z);  // Achse auf gleicher Höhe
+    // Zielpunkt: auf der Achse, gleiche Höhe, ein Stück Richtung Eingang (-Z) -> Karte zeigt
+    // schräg nach innen und der anfliegenden Kamera entgegen, bleibt aber aufrecht (lesbar).
+    const faceTarget = new THREE.Vector3(TUNNEL_ORIGIN.x, y, z - CARD_FACE_AHEAD);
     const card = { mesh, base, faceTarget, baseScale: 1, revealT: 0 };
     mesh.position.copy(base);
     mesh.userData.card = card;
@@ -1709,9 +1740,94 @@ async function buildCards() {
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
   gMat.toneMapped = false;
-  cardGlow = new THREE.Mesh(new THREE.PlaneGeometry(16, 19), gMat);
+  cardGlow = new THREE.Mesh(new THREE.PlaneGeometry(CARD_H * 1.45, CARD_H * 1.75), gMat);
   cardGlow.visible = false;
   scene.add(cardGlow);
+
+  buildTunnelShell();
+  buildTunnelGuide();
+}
+
+// Leucht-Gerüst, das den Tunnel klar als solchen zeigt: Querringe (Rippen) + Längsschienen,
+// die in die Tiefe laufen und im Nebel verschwinden -> echte Tunnel-Perspektive, dennoch dezent.
+function buildTunnelShell() {
+  const group = new THREE.Group();
+  const R = RING_R + 14;                                 // etwas weiter außen als die Karten
+  const z0 = TUNNEL_ORIGIN.z + 20, zLen = TUNNEL_LENGTH + 60;
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color('#7a52d6'), transparent: true, opacity: 0.16,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  mat.toneMapped = false;
+
+  // (1) Querringe = Tunnel-Rippen
+  const segs = 72, ringPts = [];
+  for (let s = 0; s <= segs; s++) {
+    const a = s / segs * Math.PI * 2;
+    ringPts.push(new THREE.Vector3(Math.cos(a) * R, Math.sin(a) * R, 0));
+  }
+  const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPts);
+  const NR = 48;                                         // dichtere Rippung über den langen Tunnel
+  for (let i = 0; i < NR; i++) {
+    const ring = new THREE.LineLoop(ringGeo, mat);
+    ring.position.set(TUNNEL_ORIGIN.x, TUNNEL_ORIGIN.y, z0 + i / (NR - 1) * zLen);
+    group.add(ring);
+  }
+
+  // (2) Längsschienen = laufen die ganze Länge -> Perspektive, die in die Tiefe zieht
+  const NL = 6;
+  for (let j = 0; j < NL; j++) {
+    const a = j / NL * Math.PI * 2;
+    const lx = TUNNEL_ORIGIN.x + Math.cos(a) * R, ly = TUNNEL_ORIGIN.y + Math.sin(a) * R;
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(lx, ly, z0), new THREE.Vector3(lx, ly, z0 + zLen),
+    ]);
+    group.add(new THREE.Line(lineGeo, mat));
+  }
+
+  group.visible = false;
+  scene.add(group);
+  tunnelShell = group;
+}
+
+// Fließende Leit-Ringe entlang der Achse: zeigen dem Schiff sanft den Weg zum Ausgangsportal.
+// Cyan wie das Portal -> "folge dem Licht". Werden in animate() nach vorne bewegt.
+function buildTunnelGuide() {
+  const group = new THREE.Group();
+  const segs = 64, R = RING_R * 0.42;                   // schmaler Leit-Ring nahe der Flugachse
+  const pts = [];
+  for (let s = 0; s <= segs; s++) {
+    const a = s / segs * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a) * R, Math.sin(a) * R, 0));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const NG = 7;                                          // Anzahl fließender Leit-Ringe
+  for (let i = 0; i < NG; i++) {
+    const mat = new THREE.LineBasicMaterial({
+      color: new THREE.Color('#70e0ff'), transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    mat.toneMapped = false;
+    const ring = new THREE.LineLoop(geo, mat);
+    ring.userData.phase = i / NG;                        // gleichmäßig über die Tunnellänge verteilt
+    group.add(ring);
+  }
+  group.visible = false;
+  scene.add(group);
+  tunnelGuide = group;
+}
+
+// Bewegt die Leit-Ringe stetig Richtung Ausgang und blendet sie an Enden weich aus.
+function updateTunnelGuide(time) {
+  if (!tunnelGuide || !tunnelGuide.visible) return;
+  const z0 = TUNNEL_ORIGIN.z + 20, len = TUNNEL_LENGTH + 60, speed = 0.06;
+  for (const ring of tunnelGuide.children) {
+    const f = (time * speed + ring.userData.phase) % 1;  // 0..1 entlang des Tunnels
+    ring.position.set(TUNNEL_ORIGIN.x, TUNNEL_ORIGIN.y, z0 + f * len);
+    ring.material.opacity = Math.sin(f * Math.PI) * 0.45; // sanft auf-/abblenden, Maximum in der Mitte
+    const s = 1 + f * 0.6;                                // leicht aufweiten Richtung Ausgang -> Tiefe
+    ring.scale.set(s, s, 1);
+  }
 }
 
 function buildScene() {
@@ -1781,14 +1897,14 @@ function applyFlyRotation() {
   if (shipLoaded && viewMode === 'inside') return;   // Schiff + Chase-Cam steuern die Kamera
   camera.rotation.set(fly.pitch, fly.yaw, 0, 'YXZ');
 }
-// Pfeiltasten auf WASD abbilden (Schiffssteuerung)
-const ARROW_MAP = { arrowup: 'w', arrowdown: 's', arrowleft: 'a', arrowright: 'd' };
+// Pfeiltasten: ←/→ drehen (wie A/D), ↑/↓ neigen die Nase (Pitch)
+const ARROW_MAP = { arrowup: 'pitchup', arrowdown: 'pitchdown', arrowleft: 'a', arrowright: 'd' };
 function onKeyDown(e) {
   if (!overlay.classList.contains('is-open')) return;
   if (introActive && e.key !== 'Escape') { skipIntro(); return; }
   lastInput = performance.now();
   const k = ARROW_MAP[e.key.toLowerCase()] || e.key.toLowerCase();
-  if (['w', 'a', 's', 'd', ' '].includes(k) || k === 'shift') {
+  if (['w', 'a', 's', 'd', ' ', 'pitchup', 'pitchdown'].includes(k) || k === 'shift') {
     if (!focused && !spaghetti) { fly.keys.add(k); dismissHelpSoon(); e.preventDefault(); } // WASD/Pfeile in beiden Modi
   }
   // E / Enter: eingerastetes Lock-On-Ziel aktivieren (Inside-Modus)
@@ -1817,6 +1933,7 @@ function dismissHelpSoon() {
 // Raumschiff-Physik: Beschleunigung + Trägheit/Drift
 // Shift = Boost (3x), Space = aufsteigen. Kein Absinken mehr (Pitch regelt die Höhe).
 const FLY_ACCEL = 320, FLY_DAMP = 0.95, FLY_MAX = 240, BOOST_MUL = 3;
+const FLY_ACCEL_TUNNEL = 190, FLY_MAX_TUNNEL = 125;   // im Karten-Tunnel deutlich langsamer (Ruhe & Lesezeit)
 function applyMovement(dt) {
   if (shipLoaded && viewMode === 'inside') return;   // im Inside-Modus übernimmt das Schiff
   const fwd = _shipFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -1853,6 +1970,10 @@ function updateShip(dt) {
   if (fly.keys.has('a')) { fly.yaw += KEY_YAW_RATE * dt; keyYaw = -1; }
   if (fly.keys.has('d')) { fly.yaw -= KEY_YAW_RATE * dt; keyYaw = 1; }
 
+  // Tastatur-Nicken: Pfeil hoch/runter neigen die Nase (vertikale Entsprechung zu A/D)
+  if (fly.keys.has('pitchup'))   fly.pitch += KEY_PITCH_RATE * dt;   // Nase hoch
+  if (fly.keys.has('pitchdown')) fly.pitch -= KEY_PITCH_RATE * dt;   // Nase runter
+
   // Ziel-Orientierung aus Eingabe; weiches Eindrehen
   fly.pitch = Math.max(-1.2, Math.min(1.2, fly.pitch));
   _shipEuler.set(fly.pitch, fly.yaw, 0, 'YXZ');
@@ -1864,8 +1985,9 @@ function updateShip(dt) {
 
   const boost = fly.keys.has('shift');
   shipState.boost = boost;
-  const accel = FLY_ACCEL * (boost ? BOOST_MUL : 1);
-  const maxV = FLY_MAX * (boost ? BOOST_MUL : 1);
+  const slow = (realm === 'cards');                    // im Karten-Tunnel langsamer fliegen
+  const accel = (slow ? FLY_ACCEL_TUNNEL : FLY_ACCEL) * (boost ? BOOST_MUL : 1);
+  const maxV = (slow ? FLY_MAX_TUNNEL : FLY_MAX) * (boost ? BOOST_MUL : 1);
 
   // Schub nur entlang der Nase (W/S) + Steigen (Leertaste) — kein Seitwärtsgang mehr
   const acc = _camDesired.set(0, 0, 0);
@@ -2059,7 +2181,7 @@ function setPointer(ev) {
 }
 function intersectCards() {
   raycaster.setFromCamera(pointer, camera);
-  return raycaster.intersectObjects(cards.map(c => c.mesh), false);
+  return raycaster.intersectObjects(cards.filter(c => c.mesh.visible).map(c => c.mesh), false);
 }
 function onPointerMove(ev) {
   if (isDown) dismissHelpSoon();
@@ -2174,7 +2296,7 @@ function focusCard(card) {
   // leicht erhöht -> Karte bildfüllend. Die Karte dreht sich aktiv zur Kamera (lesbar).
   const base = card.base;
   const inward = (card.faceTarget || center).clone().sub(base).normalize();
-  const camPos = base.clone().addScaledVector(inward, 17).add(new THREE.Vector3(0, 2.5, 0));
+  const camPos = base.clone().addScaledVector(inward, CARD_H * 1.7).add(new THREE.Vector3(0, 2.5, 0));
   flyCameraTo(camPos, base, 1.25, 'power3.inOut');
 }
 // Zurück zur Verfolgerkamera hinter dem (geparkten) Schiff — nahtlos, da das Schiff nicht bewegt wurde
@@ -2320,7 +2442,7 @@ function pickReticleTarget() {
     if (hit && (!best || hit.distance < best.distance)) { info.distance = hit.distance; best = info; }
   };
   if (realm === 'cards') {
-    const ch = raycaster.intersectObjects(cards.map(c => c.mesh), false)[0];
+    const ch = raycaster.intersectObjects(cards.filter(c => c.mesh.visible).map(c => c.mesh), false)[0];
     if (ch) consider(ch, { type: 'card', ref: ch.object.userData.card, name: ch.object.userData.project.title });
     if (exitPortal && exitPortal.visible) consider(raycaster.intersectObject(exitPortal.userData.hitMesh, false)[0], { type: 'exit', ref: null, name: 'Rückkehr-Portal' });
   } else {
@@ -2432,6 +2554,11 @@ function animate() {
   updateAmbient(dt);
   updateWorld(dt);
   updateWormhole(dt);
+  if (realm === 'cards') {
+    updateTunnelGuide(elapsed);                        // fließende Leit-Ringe zum Ausgang
+    // Tunnel-Licht reist leicht voraus mit dem Schiff -> Schiff bleibt auf ganzer Länge beleuchtet
+    if (tunnelLight) tunnelLight.position.set(shipState.pos.x, shipState.pos.y + 6, shipState.pos.z + 35);
+  }
 
   // Kamera-Steuerung je nach Modus (Intro/sanfte Fahrten steuern selbst)
   if (!focused && !focusedPlanet && !spaghetti && !introActive && !camFlying) {
@@ -2464,7 +2591,7 @@ function animate() {
     raycaster.setFromCamera(pointer, camera);
     let card = null;
     if (realm === 'cards') {
-      const hits = raycaster.intersectObjects(cards.map(c => c.mesh), false);
+      const hits = raycaster.intersectObjects(cards.filter(c => c.mesh.visible).map(c => c.mesh), false);
       card = hits.length ? hits[0].object.userData.card : null;
       // Hysterese: aktuellen Hover halten, solange er noch getroffen wird (kein Flackern)
       if (hovered && hits.some(h => h.object.userData.card === hovered)) card = hovered;
@@ -2483,32 +2610,44 @@ function animate() {
     hoveredWorld = null;
   }
 
-  // Karten sitzen fest in der Tunnel-Helix (keine Dome-Rotation mehr). Im Haupt-Realm
-  // sind sie unsichtbar (20000 Einheiten entfernt) und werden übersprungen.
+  // Proximity-Reveal: Im Tunnel erscheinen nur die nächsten ~2 Karten rund ums Schiff – sie
+  // tauchen vor dem Schiff aus dem Dunkel auf und verblassen nach dem Passieren wieder. Das hält
+  // die Galerie übersichtlich und verhindert, dass man in weit entfernte Karten hineinfliegt.
+  const refZ = (realm === 'cards') ? (shipLoaded ? shipState.pos.z : camera.position.z) : 0;
   for (const c of cards) {
-    if (!c.mesh.visible) continue;
-    const p = c.base;                                   // feste Helix-Position
-    const ft = c.faceTarget || center;
+    let rev = 0;
+    if (realm === 'cards') {
+      const d = c.base.z - refZ;                          // >0 = noch vor dem Schiff
+      const appear = THREE.MathUtils.clamp((REVEAL_IN_FAR - d) / (REVEAL_IN_FAR - REVEAL_IN_NEAR), 0, 1);
+      const trail  = THREE.MathUtils.clamp((d - REVEAL_OUT_FAR) / (REVEAL_OUT_NEAR - REVEAL_OUT_FAR), 0, 1);
+      rev = appear * trail;
+    }
     const active = (c === hovered || c === focused);
-    const rt = c.revealT;
+    if (active) rev = 1;                                  // angevisierte/fokussierte Karte immer voll da
+    c.revealT = rev;
+    const vis = rev > 0.002;
+    if (c.mesh.visible !== vis) c.mesh.visible = vis;
+    if (!vis) continue;
+    c.mesh.material.opacity = rev;                        // sanftes Auf-/Abblenden beim Erscheinen/Passieren
 
-    // Position: beim Hover ein Stück zur Kamera; beim Fokus ruhig (Kamera fliegt hin)
+    const p = c.base;                                     // feste Galerie-Position
+    const ft = c.faceTarget || center;
+    // Position: beim Hover ein Stück zur Kamera; sonst fest an der Wand
     let target = p;
     if (c === hovered && !focused) {
       const toCam = _tmpVec.copy(camera.position).sub(p).normalize();
-      target = p.clone().addScaledVector(toCam, 8);
+      target = p.clone().addScaledVector(toCam, 10);
     }
-    // elegantes Einschweben: aus der Tunnelachse heraus zur Wand
-    if (rt < 1) target = ft.clone().lerp(target, rt);
-    c.mesh.position.lerp(target, rt < 1 ? 0.5 : 0.16);
+    c.mesh.position.lerp(target, 0.16);
 
-    // Ausrichtung: Standard -> Blick zur Tunnelachse (nach innen); aktiv -> Flip zur Kamera (lesbar)
+    // Ausrichtung: Standard -> Blick nach innen/voraus; aktiv -> Flip zur Kamera (lesbar)
     if (active) { dummy.position.copy(c.mesh.position); dummy.lookAt(camera.position); }
     else        { dummy.position.copy(p);               dummy.lookAt(ft); }
     c.mesh.quaternion.slerp(dummy.quaternion, active ? 0.18 : 0.12);
 
-    const ts = (active ? c.baseScale * 1.6 : c.baseScale) * (rt < 1 ? rt : 1);
-    c.mesh.scale.lerp(dummy.scale.set(ts, ts, ts), rt < 1 ? 0.5 : 0.16);
+    // Scale: wächst beim Erscheinen sanft herein (0.82 -> 1), 1.6x wenn aktiv
+    const ts = (active ? c.baseScale * 1.6 : c.baseScale) * (0.82 + 0.18 * rev);
+    c.mesh.scale.lerp(dummy.scale.set(ts, ts, ts), active ? 0.16 : 0.3);
   }
 
   // EIN Glow folgt der aktiven Karte (Hover/Fokus = violett, Fadenkreuz = cyan)
@@ -2958,15 +3097,19 @@ function drawStarmapTunnel() {
   starmapCtx.fillRect(0, 0, W, H);
   const z0 = TUNNEL_ORIGIN.z, z1 = TUNNEL_ORIGIN.z + TUNNEL_LENGTH + 80;
   const zToX = (z) => pad + (z - z0) / (z1 - z0) * (W - 2 * pad);
-  const xToY = (x) => H / 2 - (x - TUNNEL_ORIGIN.x) / (TUNNEL_RADIUS * 1.5) * (H / 2 - pad);
+  const xToY = (x) => H / 2 - (x - TUNNEL_ORIGIN.x) / (RING_R * 1.5) * (H / 2 - pad);
   // Korridor-Achse
   starmapCtx.strokeStyle = 'rgba(176,124,255,0.28)'; starmapCtx.lineWidth = 1;
   starmapCtx.beginPath(); starmapCtx.moveTo(pad, H / 2); starmapCtx.lineTo(W - pad, H / 2); starmapCtx.stroke();
   // Karten
   for (const c of cards) {
     const active = (c === hovered || c === focused);
-    starmapCtx.fillStyle = active ? '#ffffff' : '#b07cff';
-    starmapCtx.beginPath(); starmapCtx.arc(zToX(c.base.z), xToY(c.base.x), active ? 4 : 2.6, 0, Math.PI * 2); starmapCtx.fill();
+    const rev = c.revealT || 0;                          // aktuell enthüllte Karten hervorheben
+    if (active) starmapCtx.fillStyle = '#ffffff';
+    else if (rev > 0.05) starmapCtx.fillStyle = `rgba(176,124,255,${(0.5 + 0.5 * rev).toFixed(2)})`;
+    else starmapCtx.fillStyle = 'rgba(176,124,255,0.26)'; // schlummernde Karten gedimmt
+    const rad = active ? 4 : (2.2 + 1.8 * rev);
+    starmapCtx.beginPath(); starmapCtx.arc(zToX(c.base.z), xToY(c.base.x), rad, 0, Math.PI * 2); starmapCtx.fill();
   }
   // Ausgangsportal
   if (exitPortal) {
