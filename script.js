@@ -258,5 +258,10 @@ if (controlsContainer) {
     // Konsolen-Hinweis
     console.log("Psst... Suche nach einem alten Code, um die Navigation zu beschleunigen (↑ ↑ ↓ ↓ ← → ← → B A)");
 
+    window.fadeParticles = function(opacity) {
+        const container = document.getElementById('particles-js');
+        if (container) container.style.opacity = opacity;
+    };
+
 }); // Ende DOMContentLoaded
 

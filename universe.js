@@ -29,15 +29,15 @@ const COL = {
   white:  new THREE.Color('#ffffff'),
 };
 
-const BH_RADIUS   = 16;       // Event-Horizont (groß & prominent — vergrößert)
-const DISK_INNER  = 20;
-const DISK_OUTER  = 80;
-const INSIDE_HOME  = new THREE.Vector3(0, 26, 92);   // Raumschiff-Start: außerhalb des Lochs, mit Blick zum Zentrum
+const BH_RADIUS   = 30;       // Event-Horizont (groß & prominent)
+const DISK_INNER  = 38;
+const DISK_OUTER  = 200;
+const INSIDE_HOME  = new THREE.Vector3(0, 400, 2800);  // Raumschiff-Start: weit außerhalb (Scheibe füllt nur ~1/3 Bild, dezentes Lensing), leicht erhöht, Blick zum Zentrum
 
 /* ---- Paralleluniversum: Karten-Tunnel hinter dem Wurmloch ----
    Liegt weit jenseits der Kamera-Far-Plane (12000) vom Zentrum, sodass Haupt-
    universum und Tunnel sich gegenseitig nicht sehen (automatische Isolation). */
-const WORMHOLE_ORBIT_R = 150;                         // Umlaufradius des Wurmlochs ums Schwarze Loch
+const WORMHOLE_ORBIT_R = 700;                         // Umlaufradius des Wurmlochs ums Schwarze Loch
 const TUNNEL_ORIGIN = new THREE.Vector3(0, 0, 20000); // Mittelachse des Karten-Tunnels
 const TUNNEL_LENGTH = 3400;                           // sehr langer Galerie-Tunnel (große Abstände zum Erfassen jeder Karte)
 const RING_R = 36;                                    // Abstand der Karten von der Flugachse (Galerie-Wand)
@@ -124,26 +124,71 @@ function setupScrollLayers() {
   if (reduceMotion || !window.gsap || !window.ScrollTrigger) return;
   gsap.registerPlugin(ScrollTrigger);
 
-  // Layer 0: Startseite (Hero) schwebt nach hinten/oben weg
-  gsap.to('.hero', {
-    scale: 0.82, y: -70, opacity: 0.12, rotateX: 10,
-    transformPerspective: 1200, transformOrigin: '50% 0%', ease: 'none',
-    scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true },
-  });
+  // WICHTIG: Die Hauptseite (Hero & "My Space") bleibt bewusst UNANGETASTET –
+  // kein Scale/Blur/Kippen, damit sie visuell unverändert und normal nutzbar bleibt.
+  // Nur die Gateway-/"Enter Universe"-Sektion bekommt einen nahtlosen Spezial-Übergang.
 
-  // "My Space" zieht sich ebenfalls leicht in die Tiefe zurück
-  gsap.to('#ueber-mich', {
-    scale: 0.9, y: -45, opacity: 0.22, rotateX: 6,
-    transformPerspective: 1200, transformOrigin: '50% 0%', ease: 'none',
-    scrollTrigger: { trigger: '#ueber-mich', start: 'top top', end: 'bottom top', scrub: true },
-  });
-
-  // Layer 1: Gateway schiebt sich "aus der Grube" nach oben
+  // Gateway taucht beim Hereinscrollen weich auf (sanftes Heben + Fade, kein hartes 3D-Kippen)
   gsap.fromTo('#gateway',
-    { scale: 0.9, y: 120, opacity: 0.25, rotateX: -9, transformPerspective: 1200, transformOrigin: '50% 100%' },
-    { scale: 1, y: 0, opacity: 1, rotateX: 0, ease: 'none',
-      scrollTrigger: { trigger: '#gateway', start: 'top bottom', end: 'top center', scrub: true } }
+    { y: 36, opacity: 0.5 },
+    { y: 0, opacity: 1, ease: 'none',
+      scrollTrigger: { trigger: '#gateway', start: 'top bottom', end: 'top 55%', scrub: true } }
   );
+
+  // Gateway-Core Glow intensiviert sich scroll-gesteuert (Portal "lädt sich auf")
+  gsap.fromTo('.g-core',
+    { scale: 1 },
+    { scale: 1.8, ease: 'none',
+      scrollTrigger: { trigger: '#gateway', start: 'top 80%', end: 'top 20%', scrub: true } }
+  );
+
+  // Gateway gleitet beim Weiterscrollen zu den Projekten sanft weg (nur Fade – kein Blur/Kippen,
+  // damit die Projekt-Sektion darunter unverzerrt bleibt)
+  gsap.to('#gateway', {
+    opacity: 0.4, ease: 'none',
+    scrollTrigger: { trigger: '#explorations', start: 'top bottom', end: 'top center', scrub: true },
+  });
+
+  // Partikel dimmen sich zur Gateway-Mitte hin ab (tieferer Space) und hellen davor/danach
+  // wieder voll auf – so bleibt der Sternenhimmel auf der restlichen Seite unverändert.
+  if (window.fadeParticles) {
+    ScrollTrigger.create({
+      trigger: '#gateway',
+      start: 'top bottom',
+      end: 'bottom top',
+      scrub: true,
+      onUpdate: (self) => {
+        const dim = 1 - Math.sin(self.progress * Math.PI) * 0.45;
+        window.fadeParticles(dim);
+      },
+    });
+  }
+}
+
+/* ================================================================
+   1b) PRE-INIT: Szene vorladen wenn Gateway in Sichtweite
+   ================================================================ */
+function setupPreInit() {
+  if (isMobile() || !hasWebGL() || scenePreInited) return;
+
+  const gateway = document.getElementById('gateway');
+  if (!gateway) return;
+
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting && !scenePreInited) {
+        scenePreInited = true;
+        observer.disconnect();
+        overlay.classList.add('is-preloaded');
+        initSceneOnce().then(() => {
+          onResize();
+          startLoop();
+        });
+      }
+    }
+  }, { root: null, rootMargin: '300px 0px 0px 0px', threshold: 0.01 });
+
+  observer.observe(gateway);
 }
 
 /* ================================================================
@@ -218,9 +263,71 @@ function hideWarp() {
   ctx.clearRect(0, 0, warpCanvas.width, warpCanvas.height);
 }
 function fadeOutWarp() {
-  warpCanvas.style.transition = 'opacity 0.6s ease';
+  warpCanvas.style.transition = 'opacity 0.8s ease';
   warpCanvas.style.opacity = '0';
-  setTimeout(hideWarp, 650);
+  setTimeout(hideWarp, 850);
+}
+
+/* Anhaltender Warp: kontinuierlich fließende Hyperraum-Streifen für holdSec Sekunden
+   (Intensität rampt in den ersten ~0.9s ein). Der Aufrufer blendet ihn danach via
+   fadeOutWarp() sanft in die 3D-Szene über. */
+function runWarpHold(holdSec) {
+  return new Promise((resolve) => {
+    if (reduceMotion) { resolve(); return; }
+    const ctx = warpCanvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    warpCanvas.width  = Math.floor(window.innerWidth  * dpr);
+    warpCanvas.height = Math.floor(window.innerHeight * dpr);
+    warpCanvas.style.transition = '';
+    warpCanvas.style.opacity = '';
+    warpCanvas.classList.add('is-active');
+
+    const W = warpCanvas.width, H = warpCanvas.height;
+    const cx = W / 2, cy = H / 2;
+    const maxR = Math.hypot(cx, cy) * 1.08;
+    const palette = ['#ffffff', '#cdbcff', '#a67cff', '#70d6ff'];
+    const N = Math.min(460, Math.floor((W * H) / 7600));
+    const streaks = [];
+    for (let i = 0; i < N; i++) {
+      streaks.push({
+        ang: Math.random() * Math.PI * 2,
+        off: Math.random(),
+        len: 0.05 + Math.random() * 0.09,
+        spd: 0.75 + Math.random() * 0.7,
+        c: palette[(Math.random() * palette.length) | 0],
+      });
+    }
+    const RAMP = 0.9;                  // Sekunden Einblend-Rampe der Intensität
+    const start = performance.now();
+    function frame(now) {
+      const t = (now - start) / 1000;
+      const intens = Math.min(1, t / RAMP);
+
+      ctx.fillStyle = 'rgba(2,3,10,0.30)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.lineCap = 'round';
+
+      for (const s of streaks) {
+        const head = (t * 0.5 * s.spd + s.off) % 1;       // kontinuierlich nach außen fließend
+        const tail = Math.max(0, head - s.len);
+        const r2 = Math.pow(head, 2.4) * maxR;
+        const r1 = Math.pow(tail, 2.4) * maxR;
+        const dx = Math.cos(s.ang), dy = Math.sin(s.ang);
+        ctx.strokeStyle = s.c;
+        ctx.globalAlpha = Math.min(1, 0.18 + (r2 / maxR) * 0.85) * intens;
+        ctx.lineWidth = Math.max(0.6, (r2 / maxR) * 2.8) * dpr;
+        ctx.beginPath();
+        ctx.moveTo(cx + dx * r1, cy + dy * r1);
+        ctx.lineTo(cx + dx * r2, cy + dy * r2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      if (t < holdSec) requestAnimationFrame(frame);
+      else resolve();
+    }
+    requestAnimationFrame(frame);
+  });
 }
 
 /* ---- Speed-Streaks: feine Linien an den Rändern bei hohem Tempo ---- */
@@ -236,7 +343,7 @@ function drawSpeed(speed) {
   if (!speedCtx) return;
   const W = speedCanvas.width, H = speedCanvas.height;
   speedCtx.clearRect(0, 0, W, H);
-  const k = Math.min(1, Math.max(0, (speed - 120) / (FLY_MAX - 120)));
+  const k = Math.min(1, Math.max(0, (speed - 400) / (FLY_MAX - 400)));
   if (k <= 0.01) return;
   const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -308,6 +415,8 @@ let starmapOpen = false;
 let sceneBuilt = false;
 let running = false;
 let animId = null;
+let scenePreInited = false;        // Pre-Init per IntersectionObserver gelaufen
+let portalExpandEl = null;         // fullscreen radial-gradient für Portal-Expansion
 
 let viewMode = 'inside';        // immer 'inside' (Schiff stets aktiv; Outside-/Dome-Umschalter entfernt)
 let realm = 'main';             // 'main' = Sonnensystem + Wurmloch · 'cards' = Karten-Tunnel
@@ -354,7 +463,7 @@ const shipState = {
   engineGlow: 0,                 // 0..1 für Trail-/Glow-Intensität
   boost: false,
 };
-const CHASE_OFFSET = new THREE.Vector3(0, 5, 19);     // hinter + über dem Schiff
+const CHASE_OFFSET = new THREE.Vector3(0, 7, 22);     // hinter + über dem Schiff
 const CHASE_STIFFNESS = 6.0;                          // Federhärte der Verfolgerkamera
 const KEY_YAW_RATE = 2.0;                             // rad/s — A/D drehen das Schiff (Gieren statt Seitwärtsgang)
 const KEY_PITCH_RATE = 1.6;                           // rad/s — Pfeil hoch/runter neigen die Nase (Pitch)
@@ -366,6 +475,18 @@ const _lookTarget = new THREE.Vector3();
 const _shipEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _shipTargetQuat = new THREE.Quaternion();
 const _shipMat = new THREE.Matrix4();
+
+/* ---- Autopilot & Orbit-Lock (Planet anfliegen ohne Teleport) ---- */
+const ORBIT_RADIUS_K  = 2.2;     // Orbit-Radius = Planetengröße * K (nah genug zum Lesen, ganzer Planet im Bild)
+const AUTO_ORBIT_K    = 2.6;     // ab dieser Nähe (Größe * K) klinkt sich das Schiff selbst in den Orbit ein
+const AUTOPILOT_MAX   = 2000;    // Reisetempo des Autopiloten beim Anflug
+const ORBIT_ANG_SPEED = 0.22;    // Winkelgeschwindigkeit, mit der das Schiff den Planeten umkreist (rad/s)
+let orbitPhase = 'none';         // 'none' | 'transit' (Anflug) | 'orbit' (eingerastet)
+let orbitAngle = 0;              // Winkel des Schiffs um den fokussierten Planeten
+let orbitCooldown = 0;           // kurze Sperre nach dem Verlassen, damit Auto-Orbit nicht sofort wieder greift
+const _orbTmp  = new THREE.Vector3();
+const _orbTmp2 = new THREE.Vector3();
+const _orbQuat = new THREE.Quaternion();
 
 /* ---- weiche Partikel-Textur ---- */
 function makeSpriteTexture() {
@@ -535,7 +656,7 @@ function buildStarfield(sprite) {
   const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), ph = new Float32Array(N);
   const tmp = new THREE.Color();
   for (let i = 0; i < N; i++) {
-    const r = 1600 + Math.random() * 2600;
+    const r = 14000 + Math.random() * 12000;
     const th = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1);
     pos[i * 3] = r * Math.sin(phi) * Math.cos(th);
     pos[i * 3 + 1] = r * Math.cos(phi);
@@ -772,9 +893,9 @@ function buildNebula() {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
     m.userData.baseOpacity = baseOpacity;
     // weit draußen verteilen (jenseits der Planetenbahnen) -> reiner Hintergrund
-    const r = 1400 + Math.random() * 1600;
+    const r = 12000 + Math.random() * 12000;
     const th = Math.random() * Math.PI * 2;
-    m.position.set(Math.cos(th) * r, (Math.random() - 0.5) * 1200, Math.sin(th) * r);
+    m.position.set(Math.cos(th) * r, (Math.random() - 0.5) * 6000, Math.sin(th) * r);
     m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     nebula.add(m);
   }
@@ -888,7 +1009,7 @@ const WORLD = {
   planets: [
     {
       id: 'origin', name: 'Origin', kind: 'Felswelt · gezeitengebunden',
-      type: 'rocky', orbitR: 220, orbitY: 14, size: 7.0, speed: 0.034, inc: 0.14, tilt: 0.3,
+      type: 'rocky', orbitR: 1800, orbitY: 0, size: 100, speed: 0.034, inc: 0, tilt: 0.3,
       colA: '#3a2418', colB: '#b5703a', colC: '#ffd9a0', glow: '#ffb060', glowAmt: 0.0,
       icon: 'fa-user-astronaut', accent: '#ffa94d',
       title: 'Origin — Wer steckt dahinter?',
@@ -901,12 +1022,12 @@ const WORLD = {
         'Leitsatz: FOSS first. Privacy always.',
       ],
       moons: [
-        { name: 'Curriculum', size: 1.6, r: 16, speed: 0.26, color: '#ffcf99' },
+        { name: 'Curriculum', size: 13, r: 130, speed: 0.26, color: '#ffcf99' },
       ],
     },
     {
       id: 'forge', name: 'Forge', kind: 'Vulkanwelt · aktive Oberfläche',
-      type: 'lava', orbitR: 380, orbitY: -34, size: 11.0, speed: 0.022, inc: -0.18, tilt: 0.5,
+      type: 'lava', orbitR: 3500, orbitY: 0, size: 160, speed: 0.022, inc: 0, tilt: 0.5,
       colA: '#1c0a06', colB: '#5a1505', colC: '#ff5a1e', glow: '#ff8a2a', glowAmt: 0.0,
       icon: 'fa-hammer', accent: '#ff6b6b',
       title: 'Forge — Was entsteht mit den Händen?',
@@ -922,15 +1043,15 @@ const WORLD = {
         { url: 'https://professorquantumuniverse.github.io/ProjectExperience/', text: 'Project Experience', icon: 'fas fa-tree' },
       ],
       moons: [
-        { name: 'Werkbank', size: 2.1, r: 22, speed: 0.22, color: '#ff8c5a' },
-        { name: 'Drucker', size: 1.5, r: 31, speed: 0.16, color: '#ffb38a' },
+        { name: 'Werkbank', size: 17, r: 180, speed: 0.22, color: '#ff8c5a' },
+        { name: 'Drucker', size: 12, r: 250, speed: 0.16, color: '#ffb38a' },
       ],
     },
     {
       id: 'aether', name: 'Aether', kind: 'Gasriese · mit Ringsystem',
-      type: 'gas', orbitR: 600, orbitY: 44, size: 16.0, speed: 0.015, inc: 0.10, tilt: 0.42,
+      type: 'gas', orbitR: 6000, orbitY: 0, size: 280, speed: 0.015, inc: 0, tilt: 0.42,
       colA: '#2a1a5e', colB: '#7a4bd0', colC: '#c9a8ff', glow: '#a67cff', glowAmt: 0.0,
-      ring: { inner: 23, outer: 40, color: '#b79cff', tilt: 0.42 },
+      ring: { inner: 180, outer: 360, color: '#b79cff', tilt: 0.42 },
       icon: 'fa-atom', accent: '#a67cff',
       title: 'Aether — Was bewegt den Geist?',
       lead: 'Wirbelnde Wolkenbänder voller Formeln und Fragen.',
@@ -945,13 +1066,13 @@ const WORLD = {
         { url: 'https://jufoanalytics-main.streamlit.app/', text: 'JuFoAnalytics', icon: 'fas fa-chart-line' },
       ],
       moons: [
-        { name: 'AstroClub', size: 2.6, r: 52, speed: 0.15, color: '#c4a8ff' },
-        { name: 'Daten', size: 2.0, r: 66, speed: 0.11, color: '#9a78e0' },
+        { name: 'AstroClub', size: 21, r: 420, speed: 0.15, color: '#c4a8ff' },
+        { name: 'Daten', size: 16, r: 530, speed: 0.11, color: '#9a78e0' },
       ],
     },
     {
       id: 'nexus', name: 'Nexus', kind: 'Eiswelt · Polarlichter',
-      type: 'ice', orbitR: 780, orbitY: -58, size: 10.0, speed: 0.011, inc: -0.22, tilt: 0.6,
+      type: 'ice', orbitR: 8500, orbitY: 0, size: 140, speed: 0.011, inc: 0.30, tilt: 0.6,
       colA: '#0a2540', colB: '#2f7fb5', colC: '#d8f4ff', glow: '#70ffd0', glowAmt: 0.0,
       aurora: 1.0,
       icon: 'fa-satellite-dish', accent: '#70d6ff',
@@ -966,9 +1087,9 @@ const WORLD = {
         { url: 'https://f-droid.org/packages/com.olaf.rereminder/', text: 'F-Droid', icon: 'fab fa-android' },
       ],
       moons: [
-        { name: 'GitHub', size: 1.9, r: 20, speed: 0.27, color: '#e8e8ff', link: 'https://github.com/ProfessorQuantumUniverse' },
-        { name: 'F-Droid', size: 1.7, r: 28, speed: 0.2, color: '#9ad6a0', link: 'https://f-droid.org/packages/com.olaf.rereminder/' },
-        { name: 'Mail', size: 1.6, r: 36, speed: 0.15, color: '#aee6ff', link: 'mailto:lorenzobaymueller@gmail.com' },
+        { name: 'GitHub', size: 15, r: 160, speed: 0.27, color: '#e8e8ff', link: 'https://github.com/ProfessorQuantumUniverse' },
+        { name: 'F-Droid', size: 14, r: 224, speed: 0.2, color: '#9ad6a0', link: 'https://f-droid.org/packages/com.olaf.rereminder/' },
+        { name: 'Mail', size: 13, r: 290, speed: 0.15, color: '#aee6ff', link: 'mailto:lorenzobaymueller@gmail.com' },
       ],
     },
   ],
@@ -1145,7 +1266,7 @@ function buildOrbitLine(p) {
 
 /* ---- ein Planetensystem (Planet + Atmosphäre + Ring + Monde) ---- */
 function buildPlanet(p, idx) {
-  buildOrbitLine(p);                           // dezente Bahnlinie auf der Ekliptik
+  const orbitLine = buildOrbitLine(p);         // dezente Bahnlinie auf der Ekliptik
 
   const group = new THREE.Group();             // bewegt sich auf der Umlaufbahn
   const body = new THREE.Group();              // trägt Planet + Eigenrotation
@@ -1191,7 +1312,7 @@ function buildPlanet(p, idx) {
   // Startwinkel gleichmäßig verteilt -> Übersicht wirkt immer ausgewogen, nie gebündelt
   const startAngle = (idx || 0) * (Math.PI * 2 / 4) + 0.5;
   const rec = {
-    data: p, group, body, mesh, mat, moons,
+    data: p, group, body, mesh, mat, moons, orbitLine,
     angle: startAngle, orbitR: p.orbitR, orbitY: p.orbitY,
     speed: p.speed, inc: p.inc, worldPos: new THREE.Vector3(),
   };
@@ -1200,7 +1321,7 @@ function buildPlanet(p, idx) {
 }
 
 /* ---- Tech-Asteroidengürtel: Partikelwolke + einzelne anklickbare Brocken ---- */
-const BELT_R0 = 455, BELT_R1 = 515;   // Gürtel zwischen Forge (380) und Aether (600)
+const BELT_R0 = 4400, BELT_R1 = 5200;   // Gürtel zwischen Forge (3500) und Aether (6000)
 function buildAsteroidBelt(sprite) {
   // (a) dünne Partikelwolke als Gürtel-Untergrund (deutlich reduziert)
   const N = 420;
@@ -1249,10 +1370,10 @@ function buildEclipticField(sprite) {
   const tmp = new THREE.Color();
   for (let i = 0; i < N; i++) {
     // Radius bevorzugt im inneren/mittleren Systembereich (sqrt-Verteilung -> dichter innen)
-    const r = 120 + Math.sqrt(Math.random()) * 740;
+    const r = 600 + Math.sqrt(Math.random()) * 8400;
     const a = Math.random() * Math.PI * 2;
     pos[i * 3] = Math.cos(a) * r;
-    pos[i * 3 + 1] = (Math.random() - 0.5) * 24;   // dünne Scheibe
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 120;   // dünne Scheibe
     pos[i * 3 + 2] = Math.sin(a) * r;
     const pick = Math.random();
     tmp.copy(pick > 0.6 ? COL.cyan : pick > 0.3 ? COL.violet : COL.white)
@@ -1486,27 +1607,29 @@ function updateWorld(dt) {
   // (nutzt worldPos vom Vorframe -> 1 Frame Versatz, unmerklich)
   let nearest = Infinity;
   for (const pl of planets) nearest = Math.min(nearest, camera.position.distanceTo(pl.worldPos));
-  const targetCalm = focusedPlanet ? 1 : (1 - THREE.MathUtils.smoothstep(nearest, 90, 340));
+  const targetCalm = 1 - THREE.MathUtils.smoothstep(nearest, 600, 2800);
   worldCalm += (targetCalm - worldCalm) * Math.min(1, dt * 3.5);
   const motion = 1 - worldCalm;   // globaler Bewegungs-Faktor
 
   // Planeten: Umlaufbahn (leicht geneigt) + Eigenrotation + Monde + Shader-Zeit
   for (const pl of planets) {
-    pl.angle += dt * pl.speed * motion;
+    // Der fokussierte Planet kreist weiter (das Schiff folgt seiner Bahn), die anderen frieren bei Nähe ein
+    const m = (focusedPlanet === pl) ? Math.max(motion, 0.45) : motion;
+    pl.angle += dt * pl.speed * m;
     const x = Math.cos(pl.angle) * pl.orbitR;
     const z = Math.sin(pl.angle) * pl.orbitR;
     pl.group.position.set(x, pl.orbitY, z).applyAxisAngle(_orbitAxis.set(0, 0, 1), pl.inc);
     pl.group.getWorldPosition(pl.worldPos);
     // gezeitengebundene Origin dreht sich nicht (eine Seite bleibt zum Zentrum); Eigenrotation läuft (sanft) weiter
-    if (pl.data.type !== 'rocky') pl.body.rotation.y += dt * 0.05 * (0.3 + 0.7 * motion);
+    if (pl.data.type !== 'rocky') pl.body.rotation.y += dt * 0.05 * (0.3 + 0.7 * m);
     pl.mat.uniforms.uTime.value = elapsed;
 
     for (const mo of pl.moons) {
-      mo.angle += dt * mo.speed * motion;
+      mo.angle += dt * mo.speed * m;
       const mx = Math.cos(mo.angle) * mo.r;
       const mz = Math.sin(mo.angle) * mo.r;
       mo.mesh.position.set(mx, Math.sin(mo.angle) * mo.r * Math.sin(mo.inc), mz);
-      mo.mesh.rotation.y += dt * 0.3 * motion;
+      mo.mesh.rotation.y += dt * 0.3 * m;
     }
   }
 
@@ -1840,9 +1963,9 @@ function buildScene() {
 
   scene = new THREE.Scene();
   // sehr dezenter Fog: Tiefe ohne die weiträumigen Planeten zu verschlucken
-  scene.fog = new THREE.FogExp2(0x05060f, 0.00012);
+  scene.fog = new THREE.FogExp2(0x05060f, 0.000025);
 
-  camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 12000);
+  camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 60000);
   camera.rotation.order = 'YXZ';
   camera.position.copy(INSIDE_HOME);
 
@@ -1905,7 +2028,7 @@ function onKeyDown(e) {
   lastInput = performance.now();
   const k = ARROW_MAP[e.key.toLowerCase()] || e.key.toLowerCase();
   if (['w', 'a', 's', 'd', ' ', 'pitchup', 'pitchdown'].includes(k) || k === 'shift') {
-    if (!focused && !spaghetti) { fly.keys.add(k); dismissHelpSoon(); e.preventDefault(); } // WASD/Pfeile in beiden Modi
+    if (!focused && !focusedPlanet && !spaghetti) { fly.keys.add(k); dismissHelpSoon(); e.preventDefault(); } // WASD/Pfeile in beiden Modi
   }
   // E / Enter: eingerastetes Lock-On-Ziel aktivieren (Inside-Modus)
   if ((k === 'e' || e.key === 'Enter') && viewMode === 'inside' && !focused && !focusedPlanet && !spaghetti &&
@@ -1932,7 +2055,7 @@ function dismissHelpSoon() {
 
 // Raumschiff-Physik: Beschleunigung + Trägheit/Drift
 // Shift = Boost (3x), Space = aufsteigen. Kein Absinken mehr (Pitch regelt die Höhe).
-const FLY_ACCEL = 320, FLY_DAMP = 0.95, FLY_MAX = 240, BOOST_MUL = 3;
+const FLY_ACCEL = 800, FLY_DAMP = 0.95, FLY_MAX = 600, BOOST_MUL = 3;
 const FLY_ACCEL_TUNNEL = 190, FLY_MAX_TUNNEL = 125;   // im Karten-Tunnel deutlich langsamer (Ruhe & Lesezeit)
 function applyMovement(dt) {
   if (shipLoaded && viewMode === 'inside') return;   // im Inside-Modus übernimmt das Schiff
@@ -1964,6 +2087,7 @@ function chaseCamPosition(out) {
 
 // Raumschiff-Flug (Inside): Maus-Yaw/Pitch = Heading, WASD = Schub, Shift = Boost
 function updateShip(dt) {
+  if (orbitCooldown > 0) orbitCooldown -= dt;          // Auto-Orbit-Sperre nach dem Verlassen abklingen lassen
   // Tastatur-Gieren: A/D (bzw. Pfeil links/rechts) drehen das Schiff, statt seitwärts
   // zu schieben. Speist direkt in fly.yaw (gleiche Achse wie die Maus).
   let keyYaw = 0;                                       // -1 = links (A), +1 = rechts (D) — fürs Banking
@@ -2012,6 +2136,14 @@ function updateShip(dt) {
     shipPivot.position.copy(shipState.pos);
     shipPivot.quaternion.copy(shipState.quat);
     if (bankGroup) bankGroup.rotation.z = shipState.rollAngle;
+  }
+
+  // Auto-Orbit: fliegt man aktiv ganz nah an einen Planeten, klinkt sich das Schiff selbst in dessen Orbit ein
+  // (nur bei echter Fahrt -> nach ESC im Stillstand rastet es nicht sofort wieder ein)
+  if (realm === 'main' && orbitCooldown <= 0 && !focused && !focusedPlanet && shipState.vel.length() > 30) {
+    for (const pl of planets) {
+      if (shipState.pos.distanceTo(pl.worldPos) < pl.data.size * AUTO_ORBIT_K) { focusPlanet(pl); break; }
+    }
   }
 }
 
@@ -2141,7 +2273,7 @@ const _trailCold = new THREE.Color('#70d6ff');
 const _trailTmp = new THREE.Color();
 function updateEngineTrail(dt) {
   if (!engineTrail || !shipLoaded) return;
-  const visible = viewMode === 'inside' && !focused && !focusedPlanet && !introActive;
+  const visible = viewMode === 'inside' && !focused && !introActive;
   engineTrail.visible = visible;
   if (!visible) return;
   const arr = engineTrail.geometry.attributes.position.array;
@@ -2318,27 +2450,114 @@ function unfocusCard() {
   }
 }
 
-/* ---- Planet anfliegen: weite Warp-Reise, dann Welt-Panel ---- */
+/* ---- Planet anfliegen: Autopilot fliegt das Schiff hin & klinkt sich in einen Orbit ein ---- */
 function focusPlanet(pl) {
   if (focused) unfocusCard();
   focusedPlanet = pl;
   controls.enabled = false;
+  fly.keys.clear();
   showPlanetDetail(pl.data);
-  // Kameraposition: zwischen Zentrum und Planet, leicht versetzt -> Planet bildfüllend
-  const wp = pl.worldPos.clone();
-  const outward = wp.clone().normalize();
-  const camPos = wp.clone()
-    .addScaledVector(outward, pl.data.size * 3.6)
-    .add(new THREE.Vector3(0, pl.data.size * 1.2, 0));
-  flyCameraTo(camPos, wp, 2.2, 'power3.inOut', true);   // länger + Warp-Puls
+  showToast('<i class="fas fa-circle-notch fa-spin"></i> Autopilot · Orbit um <span class="u-toast-strong">' + pl.data.name + '</span>', pl.data.accent);
+  if (shipLoaded) {
+    // Autopilot statt Teleport: liegt das Schiff schon nah dran -> direkt Orbit, sonst Transit-Anflug.
+    const R = pl.data.size * ORBIT_RADIUS_K;
+    orbitPhase = (shipState.pos.distanceTo(pl.worldPos) < R * 1.25) ? 'orbit' : 'transit';
+    _orbTmp.copy(shipState.pos).sub(pl.worldPos);
+    orbitAngle = Math.atan2(_orbTmp.z, _orbTmp.x);
+  } else {
+    // Fallback ohne Schiff: klassische Kamerafahrt
+    const wp = pl.worldPos.clone();
+    const outward = wp.clone().normalize();
+    const camPos = wp.clone().addScaledVector(outward, pl.data.size * 2.8).add(new THREE.Vector3(0, pl.data.size * 0.8, 0));
+    flyCameraTo(camPos, wp, 2.2, 'power3.inOut', true);
+  }
 }
+
+/* ---- Nase weich auf einen Punkt / in eine Richtung ausrichten (für Autopilot/Orbit) ---- */
+function faceShipToward(point, dt, k) {
+  _shipMat.lookAt(shipState.pos, point, _shipUp.set(0, 1, 0));
+  _orbQuat.setFromRotationMatrix(_shipMat);
+  shipState.quat.slerp(_orbQuat, 1 - Math.exp(-k * dt));
+}
+function faceShipDir(dir, dt, k) {
+  _lookTarget.copy(shipState.pos).add(dir);
+  _shipMat.lookAt(shipState.pos, _lookTarget, _shipUp.set(0, 1, 0));
+  _orbQuat.setFromRotationMatrix(_shipMat);
+  shipState.quat.slerp(_orbQuat, 1 - Math.exp(-k * dt));
+}
+
+/* ---- Autopilot-Anflug + Orbit-Lock: läuft pro Frame, solange ein Planet fokussiert ist ---- */
+function updatePlanetFocus(dt) {
+  const pl = focusedPlanet; if (!pl) return;
+  if (!shipLoaded) { camera.lookAt(pl.worldPos); return; }   // Fallback: Kamera blickt zum Planeten
+  const pc = pl.worldPos;
+  const R = pl.data.size * ORBIT_RADIUS_K;
+  let targetRoll = 0;
+
+  if (orbitPhase === 'transit') {
+    // Ziel = nächstgelegener Punkt auf der Orbit-Schale; mit hohem Tempo anfliegen, kurz vor Ankunft abbremsen
+    _orbTmp.copy(shipState.pos).sub(pc);
+    if (_orbTmp.lengthSq() < 1e-4) _orbTmp.set(1, 0, 0);
+    _orbTmp.normalize();
+    _orbTmp2.copy(pc).addScaledVector(_orbTmp, R);           // Zielpunkt
+    _shipFwd.copy(_orbTmp2).sub(shipState.pos);
+    const dist = _shipFwd.length();
+    const speed = Math.min(AUTOPILOT_MAX, dist * 2.4 + 30);  // Ease-out
+    if (dist > 1e-3) shipState.pos.addScaledVector(_shipFwd.multiplyScalar(1 / dist), speed * dt);
+    faceShipToward(_orbTmp2, dt, 7);
+    shipState.engineGlow = 1; shipState.boost = true;
+    flyWarpSpeed = speed;                                    // Speed-Streaks während der Reise
+    // Banking: in die Anflugkurve neigen (wie viel das Ziel seitlich liegt)
+    _shipRight.set(1, 0, 0).applyQuaternion(shipState.quat);
+    targetRoll = THREE.MathUtils.clamp(-_shipRight.dot(_shipFwd) * 1.2, -0.6, 0.6);
+    if (dist < R * 0.2) {
+      orbitPhase = 'orbit';
+      _orbTmp.copy(shipState.pos).sub(pc);
+      orbitAngle = Math.atan2(_orbTmp.z, _orbTmp.x);
+    }
+  } else {                                                   // orbit: das Schiff umkreist den Planeten und folgt ihm
+    orbitAngle += dt * ORBIT_ANG_SPEED;
+    _orbTmp.set(Math.cos(orbitAngle) * R, R * 0.16, Math.sin(orbitAngle) * R).add(pc);
+    shipState.pos.lerp(_orbTmp, 1 - Math.exp(-6 * dt));      // sanft auf die Orbit-Bahn einschwenken
+    _orbTmp2.set(-Math.sin(orbitAngle), 0, Math.cos(orbitAngle));   // Tangente = Flugrichtung
+    faceShipDir(_orbTmp2, dt, 5);
+    shipState.engineGlow = 0.3; shipState.boost = false;
+    flyWarpSpeed = 0;
+    targetRoll = -0.5;                                       // konstante Neigung in die Kreisbahn
+  }
+
+  // Banking weich annähern + auf das Modell anwenden
+  shipState.rollAngle += (targetRoll - shipState.rollAngle) * Math.min(1, dt * 3);
+  if (shipPivot) {
+    shipPivot.position.copy(shipState.pos);
+    shipPivot.quaternion.copy(shipState.quat);
+    if (bankGroup) bankGroup.rotation.z = shipState.rollAngle;
+  }
+
+  // Kamera: Planet bildfüllend, Schiff im Vordergrund (hinter dem Schiff, vom Planeten weg)
+  _orbTmp.copy(shipState.pos).sub(pc).normalize();
+  _camDesired.copy(shipState.pos)
+    .addScaledVector(_orbTmp, pl.data.size * 1.2)
+    .addScaledVector(_shipUp.set(0, 1, 0), pl.data.size * 0.4);
+  camera.position.lerp(_camDesired, 1 - Math.exp(-2.4 * dt));
+  camera.lookAt(pc);
+}
+
 function unfocusPlanet() {
   const was = focusedPlanet;
   focusedPlanet = null;
+  orbitPhase = 'none';
+  orbitCooldown = 3.0;                       // Sperre, damit der Auto-Orbit nicht sofort wieder greift
+  flyWarpSpeed = 0;
   hideDetail();
   if (!was) return;
+  showToast('<i class="fas fa-arrow-up-from-bracket"></i> Orbit verlassen · <span class="u-toast-strong">' + was.data.name + '</span>', '#70d6ff');
   if (shipLoaded) {
-    returnToShipView(1.5);
+    // Heading aus der aktuellen Schiffsausrichtung übernehmen -> kein Sprung bei Steuerübernahme
+    _shipEuler.setFromQuaternion(shipState.quat, 'YXZ');
+    fly.yaw = _shipEuler.y; fly.pitch = THREE.MathUtils.clamp(_shipEuler.x, -1.2, 1.2);
+    shipState.vel.set(0, 0, 0);
+    returnToShipView(1.2);
   } else {
     flyCameraTo(INSIDE_HOME, new THREE.Vector3(80, 2, 0), 1.5).then(() => { fly.yaw = camera.rotation.y; fly.pitch = camera.rotation.x; });
   }
@@ -2429,6 +2648,26 @@ function hideDetail() {
   detailEl.classList.remove('is-open');
   detailEl.setAttribute('aria-hidden', 'true');
   setPanelAccent(null);
+}
+
+/* ---- HUD-Toast: kurze Statusmeldung im HUD-Stil (Orbit eingeleitet / verlassen) ---- */
+let toastEl = null, toastTimer = null;
+function showToast(html, accent) {
+  if (!overlay) return;
+  if (!toastEl) {
+    toastEl = document.createElement('div');
+    toastEl.className = 'u-toast';
+    toastEl.setAttribute('aria-hidden', 'true');
+    overlay.appendChild(toastEl);
+  }
+  toastEl.innerHTML = html;
+  const a = accent || '#a67cff';
+  toastEl.style.setProperty('--color-accent', a);
+  toastEl.style.setProperty('--color-accent-glow', a + '55');   // Akzent mit Alpha für den Glow
+  void toastEl.offsetWidth;                                     // Reflow -> Transition triggert zuverlässig
+  toastEl.classList.add('is-show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { if (toastEl) toastEl.classList.remove('is-show'); }, 2600);
 }
 
 /* ---- Lock-On: nächstes Ziel im Fadenkreuz (realm-abhängig) ---- */
@@ -2565,12 +2804,12 @@ function animate() {
     if (viewMode === 'inside') { updateFly(dt); }
     else { applyMovement(dt); controls.update(); }
   }
-  // Beim Planet-Fokus folgt der Blick dem (langsam weiterziehenden) Planeten
-  if (focusedPlanet && !camFlying) camera.lookAt(focusedPlanet.worldPos);
+  // Planet-Fokus: Autopilot-Anflug + Orbit-Lock (Schiff fliegt selbst, kein Teleport)
+  if (focusedPlanet && !camFlying) updatePlanetFocus(dt);
 
-  // Raumschiff: Sichtbarkeit, Triebwerksspur & Heck-Licht
+  // Raumschiff: Sichtbarkeit, Triebwerksspur & Heck-Licht (im Orbit sichtbar lassen)
   if (shipPivot) {
-    shipPivot.visible = shipLoaded && viewMode === 'inside' && !introActive && !focused && !focusedPlanet && !spaghetti;
+    shipPivot.visible = shipLoaded && viewMode === 'inside' && !introActive && !focused && !spaghetti;
     updateEngineTrail(dt);
     if (engineLight) engineLight.intensity = (shipPivot.visible ? 1 : 0) * (0.6 + 3.4 * (shipState.boost ? 1 : shipState.engineGlow));
   }
@@ -2686,7 +2925,8 @@ function animate() {
   // sanftes FOV: Hineinzoomen beim Fokus, Aufweiten beim Boost (Speed-Gefühl)
   if (!spaghetti) {
     const boosting = shipState.boost && viewMode === 'inside' && !focused && !focusedPlanet;
-    const tf = focused ? 50 : (boosting ? 74 : 58);
+    let tf = focused ? 50 : (boosting ? 74 : 58);
+    if (focusedPlanet) tf = (orbitPhase === 'transit') ? 72 : 56;   // Anflug: weit (Speed) · Orbit: intim
     if (Math.abs(camera.fov - tf) > 0.05) { camera.fov += (tf - camera.fov) * 0.08; camera.updateProjectionMatrix(); }
   }
 
@@ -2726,26 +2966,97 @@ function openOverlay() {
   if (loadingEl) loadingEl.classList.remove('is-hidden');
 }
 function revealOverlay() {
-  setTimeout(() => overlay.classList.add('is-visible'), 20);
+  requestAnimationFrame(() => overlay.classList.add('is-visible'));
   if (loadingEl) setTimeout(() => loadingEl.classList.add('is-hidden'), 400);
 }
 function closeOverlay() {
   overlay.classList.remove('is-open', 'is-visible');
+  overlay.classList.add('is-preloaded');
   overlay.setAttribute('aria-hidden', 'true');
+  if (window.gsap) gsap.set('.gateway-content', { clearProps: 'opacity,y,scale,transform' });
   if (window.gsap) gsap.set('.gateway-buttons', { clearProps: 'opacity,scale,transform' });
+  if (window.gsap) gsap.set('.g-core', { clearProps: 'all' });
+  if (window.gsap) gsap.set('.g-ring', { clearProps: 'all' });
 }
 
-/* ---- Cinematischer Anflug nach dem Warp ---- */
+/* ---- Cinematische Eintritts-Choreografie ----
+   Nach dem Warp ist die Kamera DICHT am Schwarzen Loch ("Du bist am SL"). */
+const INTRO_START_ANG = Math.PI * 0.15;
+const INTRO_BH_R = 150;   // Kamera-Radius dicht am SL beim Eintritt
+const INTRO_BH_Y = 24;
 function setCameraIntroStart() {
   introActive = true;
-  const ang = Math.PI * 0.15;
-  camera.position.set(Math.cos(ang) * 2000, 880, Math.sin(ang) * 2000);
+  camera.position.set(
+    Math.cos(INTRO_START_ANG) * INTRO_BH_R,
+    INTRO_BH_Y,
+    Math.sin(INTRO_START_ANG) * INTRO_BH_R,
+  );
   camera.lookAt(center);
 }
+
+/* ---- Welt erscheinen lassen: Planeten/Bahnen/Gürtel tauchen erst nach der Supernova auf ---- */
+function hideWorlds() {
+  for (const pl of planets) {
+    pl.group.visible = false;
+    pl.group.scale.setScalar(0.0001);
+    if (pl.orbitLine) { pl.orbitLine.visible = false; pl.orbitLine.material.opacity = 0; }
+  }
+  if (asteroidBelt) asteroidBelt.visible = false;
+  if (eclipticField) eclipticField.visible = false;
+  for (const tr of techRocks) tr.mesh.visible = false;
+}
+function revealWorlds() {
+  const anim = window.gsap && !reduceMotion;
+  if (asteroidBelt) asteroidBelt.visible = true;
+  if (eclipticField) eclipticField.visible = true;
+  for (const tr of techRocks) tr.mesh.visible = true;
+  planets.forEach((pl, i) => {
+    pl.group.visible = true;
+    const d = i * 0.18;
+    if (anim) {
+      gsap.fromTo(pl.group.scale,
+        { x: 0.0001, y: 0.0001, z: 0.0001 },
+        { x: 1, y: 1, z: 1, duration: 1.2, delay: d, ease: 'back.out(1.5)' });
+    } else {
+      pl.group.scale.setScalar(1);
+    }
+    if (pl.orbitLine) {
+      pl.orbitLine.visible = true;
+      if (anim) gsap.fromTo(pl.orbitLine.material, { opacity: 0 }, { opacity: 0.55, duration: 1.4, delay: d });
+      else pl.orbitLine.material.opacity = 0.55;
+    }
+  });
+}
 /* ---- Supernova: gewaltiger Blitz + Schockwelle, kurz vor Ende des Anflugs ---- */
+// Weiche Ring-Textur (gefederte Kanten statt harter RingGeometry-Annulus).
+let _softRingTex = null;
+function softRingTexture() {
+  if (_softRingTex) return _softRingTex;
+  const s = 128, c = document.createElement('canvas'); c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  g.addColorStop(0.00, 'rgba(255,255,255,0)');
+  g.addColorStop(0.58, 'rgba(255,255,255,0)');
+  g.addColorStop(0.80, 'rgba(255,255,255,0.95)');   // weicher Ring-Grat
+  g.addColorStop(0.90, 'rgba(255,255,255,0.30)');
+  g.addColorStop(1.00, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+  _softRingTex = new THREE.CanvasTexture(c); _softRingTex.colorSpace = THREE.SRGBColorSpace;
+  return _softRingTex;
+}
+// Weicher Glow-Sprite (immer zur Kamera gerichtet -> keine harten Scheibenkanten).
+function makeGlowSprite(color, opacity) {
+  const m = new THREE.SpriteMaterial({ map: spriteTex, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+  m.toneMapped = false;
+  const sp = new THREE.Sprite(m);
+  sp.layers.set(LAYER_BG);
+  scene.add(sp);
+  return sp;
+}
 function makeShockRing(color, tilt) {
-  const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const r = new THREE.Mesh(new THREE.RingGeometry(1, 1.35, 96), m);
+  const m = new THREE.MeshBasicMaterial({ color, map: softRingTexture(), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  m.toneMapped = false;
+  const r = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 2.7), m);   // weicher Ring-Grat bei ~0.8·Halbgröße
   r.rotation.x = Math.PI / 2 + tilt;
   r.layers.set(LAYER_BG);
   scene.add(r);
@@ -2755,21 +3066,20 @@ function supernova() {
   spawnNovaParticles(); // gewaltiger Partikel-Ausbruch
   if (!window.gsap) return;
 
-  // greller Kern-Blitz
-  const fMat = new THREE.MeshBasicMaterial({ color: 0xfff6e0, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), fMat);
-  flash.layers.set(LAYER_BG); scene.add(flash);
-  gsap.to(flash.scale, { x: 210, y: 210, z: 210, duration: 1.2, ease: 'power3.out' });
-  gsap.to(fMat, { opacity: 0, duration: 1.35, ease: 'power2.in', onComplete: () => { scene.remove(flash); fMat.dispose(); flash.geometry.dispose(); } });
+  // greller Kern-Blitz (weicher Glow-Sprite)
+  const flash = makeGlowSprite(0xfff6e0, 1);
+  flash.scale.set(6, 6, 1);
+  gsap.to(flash.scale, { x: 440, y: 440, duration: 1.2, ease: 'power3.out' });
+  gsap.to(flash.material, { opacity: 0, duration: 1.35, ease: 'power2.in', onComplete: () => { scene.remove(flash); flash.material.dispose(); } });
 
-  // langsam verglühender Kern (Nachglühen -> schönes Ende)
-  const eMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-  const ember = new THREE.Mesh(new THREE.SphereGeometry(BH_RADIUS * 1.6, 32, 32), eMat);
-  ember.layers.set(LAYER_BG); scene.add(ember);
+  // langsam verglühender Kern (Nachglühen -> schönes, weiches Ende)
+  const ember = makeGlowSprite(0xff7a2a, 0);
+  const er = BH_RADIUS * 3.2;                                  // Start-Durchmesser
+  ember.scale.set(er, er, 1);
   gsap.timeline()
-    .to(eMat, { opacity: 0.55, duration: 0.3, ease: 'power2.out' }, 0)
-    .to(ember.scale, { x: 4.2, y: 4.2, z: 4.2, duration: 2.8, ease: 'power1.out' }, 0)
-    .to(eMat, { opacity: 0, duration: 2.5, ease: 'power2.in', onComplete: () => { scene.remove(ember); eMat.dispose(); ember.geometry.dispose(); } }, 0.4);
+    .to(ember.material, { opacity: 0.5, duration: 0.3, ease: 'power2.out' }, 0)
+    .to(ember.scale, { x: er * 4.2, y: er * 4.2, duration: 2.8, ease: 'power1.out' }, 0)
+    .to(ember.material, { opacity: 0, duration: 2.5, ease: 'power2.in', onComplete: () => { scene.remove(ember); ember.material.dispose(); } }, 0.4);
 
   // zwei zeitversetzte Schockwellen (verschiedene Neigung/Farbe)
   const s1 = makeShockRing(0x9fd4ff, 0.32);
@@ -2789,80 +3099,110 @@ function supernova() {
 function finalFlash() {
   if (!window.gsap) return;
   if (bloomPass) { const b = bloomPass.strength; gsap.to(bloomPass, { strength: 3.4, duration: 0.18, ease: 'power2.out', onComplete: () => gsap.to(bloomPass, { strength: b, duration: 0.9 }) }); }
-  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
-  const pop = new THREE.Mesh(new THREE.SphereGeometry(2, 24, 24), m);
-  pop.layers.set(LAYER_BG); scene.add(pop);
-  gsap.to(pop.scale, { x: 95, y: 95, z: 95, duration: 0.6, ease: 'power3.out' });
-  gsap.to(m, { opacity: 0, duration: 0.7, ease: 'power2.in', onComplete: () => { scene.remove(pop); m.dispose(); pop.geometry.dispose(); } });
+  const pop = makeGlowSprite(0xffffff, 1);
+  pop.scale.set(8, 8, 1);
+  gsap.to(pop.scale, { x: 360, y: 360, duration: 0.6, ease: 'power3.out' });
+  gsap.to(pop.material, { opacity: 0, duration: 0.7, ease: 'power2.in', onComplete: () => { scene.remove(pop); pop.material.dispose(); } });
   if (flashEl) gsap.fromTo(flashEl, { opacity: 0 }, { opacity: 0.85, duration: 0.1, onComplete: () => gsap.to(flashEl, { opacity: 0, duration: 0.6 }) });
 }
 
-function spawnNovaParticles() {
-  const N = 2600;
-  const pos = new Float32Array(N * 3);
-  const vel = new Float32Array(N * 3);
-  const col = new Float32Array(N * 3);
+// Eine Ejekta-Schicht: count Partikel, Geschwindigkeit spMin..spMax, Punktgröße size,
+// Luftwiderstand drag (kleiner = fliegt weiter), hotBias>1 = mehr heiße/helle Partikel.
+function makeNovaCloud(count, spMin, spMax, size, drag, hotBias) {
+  const pos = new Float32Array(count * 3);
+  const vel = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
   const tmp = new THREE.Color();
-  const cHot = new THREE.Color('#fff6d6'), cMid = new THREE.Color('#ff8a3a'), cCold = new THREE.Color('#ff2a12');
-  for (let i = 0; i < N; i++) {
+  const cHot = new THREE.Color('#ffffff'), cWarm = new THREE.Color('#ffd27a');
+  const cMid = new THREE.Color('#ff8a3a'), cCold = new THREE.Color('#e0260f');
+  for (let i = 0; i < count; i++) {
     const dir = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
-    const sp = 40 + Math.random() * 150;
-    pos[i * 3] = dir.x * 2; pos[i * 3 + 1] = dir.y * 2; pos[i * 3 + 2] = dir.z * 2;
+    const sp = spMin + Math.random() * (spMax - spMin);
+    const r0 = 1 + Math.random() * 3;
+    pos[i * 3] = dir.x * r0; pos[i * 3 + 1] = dir.y * r0; pos[i * 3 + 2] = dir.z * r0;
     vel[i * 3] = dir.x * sp; vel[i * 3 + 1] = dir.y * sp; vel[i * 3 + 2] = dir.z * sp;
-    const c = Math.random();
-    tmp.copy(c > 0.6 ? cHot : c > 0.3 ? cMid : cCold);
+    const c = Math.random() * hotBias;
+    tmp.copy(c > 0.78 ? cHot : c > 0.52 ? cWarm : c > 0.26 ? cMid : cCold);
     col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const mat = new THREE.PointsMaterial({
-    size: 3.0, map: spriteTex, vertexColors: true, transparent: true,
+    size, map: spriteTex, vertexColors: true, transparent: true,
     depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, opacity: 1,
   });
+  mat.toneMapped = false;
   const pts = new THREE.Points(geo, mat);
   pts.layers.set(LAYER_BG);
   scene.add(pts);
-  if (novaSystem) { scene.remove(novaSystem.points); novaSystem.points.geometry.dispose(); novaSystem.points.material.dispose(); }
-  novaSystem = { points: pts, vel, t: 0, life: 2.9 };
+  return { points: pts, vel, drag };
+}
+function disposeNova() {
+  if (!novaSystem) return;
+  for (const cl of novaSystem.clouds) { scene.remove(cl.points); cl.points.geometry.dispose(); cl.points.material.dispose(); }
+  novaSystem = null;
+}
+function spawnNovaParticles() {
+  disposeNova();
+  // Mehrere Schichten -> realistische Supernova: feine Asche + Glutfetzen + große Trümmer,
+  // schnell genug, um weit über den Bildrand hinaus geschleudert zu werden.
+  const clouds = [
+    makeNovaCloud(4200, 110, 430, 3.0, 0.45, 1.0),   // feine, schnelle Asche
+    makeNovaCloud(900,  90, 320, 6.5, 0.5,  1.3),    // mittlere Glutfetzen
+    makeNovaCloud(220, 160, 560, 11.0, 0.32, 1.6),   // große, schnelle Trümmer (riesig im Vorbeiflug)
+  ];
+  novaSystem = { clouds, t: 0, life: 3.8 };
 }
 function updateNova(dt) {
   if (!novaSystem) return;
   novaSystem.t += dt;
   const e = novaSystem.t / novaSystem.life;
-  const arr = novaSystem.points.geometry.attributes.position.array;
-  const v = novaSystem.vel;
-  const drag = Math.max(0, 1 - dt * 0.7);
-  for (let i = 0; i < arr.length; i++) { arr[i] += v[i] * dt; v[i] *= drag; }
-  novaSystem.points.geometry.attributes.position.needsUpdate = true;
-  novaSystem.points.material.opacity = Math.max(0, 1 - e * e);
-  if (e >= 1) {
-    scene.remove(novaSystem.points);
-    novaSystem.points.geometry.dispose();
-    novaSystem.points.material.dispose();
-    novaSystem = null;
+  const fade = Math.max(0, 1 - e * e);
+  for (const cl of novaSystem.clouds) {
+    const arr = cl.points.geometry.attributes.position.array, v = cl.vel;
+    const dr = Math.max(0, 1 - dt * cl.drag);
+    for (let i = 0; i < arr.length; i++) { arr[i] += v[i] * dt; v[i] *= dr; }
+    cl.points.geometry.attributes.position.needsUpdate = true;
+    cl.points.material.opacity = fade;
   }
+  if (e >= 1) disposeNova();
 }
 
 function runIntro() {
   return new Promise((resolve) => {
     let novaFired = false;
     const fireNova = () => { if (!novaFired) { novaFired = true; supernova(); } };
-    // Finale: ins Schiff einsteigen (Karten bleiben im Tunnel verborgen, Wurmloch lädt zur Reise ein)
-    const settleIntoShip = async () => {
+    const startAng = INTRO_START_ANG;
+
+    // === PHASE F: Kamera senkt sich sanft über die Orbital-Ebene; das Schiff taucht auf ===
+    const descendToShip = async () => {
       realm = 'main';
       placeShipHome();                                           // Schiff an INSIDE_HOME, Blick zum Zentrum
+      introActive = false;                                       // Schiff darf jetzt sichtbar werden
+      if (shipPivot && window.gsap) {                            // Schiff "taucht auf" (Scale-Pop)
+        gsap.fromTo(shipPivot.scale, { x: 0.0001, y: 0.0001, z: 0.0001 }, { x: 1, y: 1, z: 1, duration: 1.2, ease: 'back.out(1.4)' });
+      }
       _shipFwd.set(0, 0, -1).applyQuaternion(shipState.quat);
       const chasePos = chaseCamPosition(_camDesired.clone());
       const look = shipState.pos.clone().addScaledVector(_shipFwd, 24);
-      await flyCameraTo(chasePos, look, 2.0, 'power2.inOut');
+      await flyCameraTo(chasePos, look, 3.0, 'power2.inOut');    // sanfter Sinkflug zum Schiff
       cardsRevealed = true;                                      // Lock-On/Interaktion ab jetzt aktiv
-      introActive = false;
       resolve();
     };
 
+    // === PHASE E: smoother Overview-Shot von oben; die Planeten erscheinen erst jetzt ===
+    const goOverview = async () => {
+      const top = new THREE.Vector3(700, 6200, 2200);            // hoch & leicht versetzt -> 3/4-Top-Vista
+      await flyCameraTo(top, center, 3.2, 'power2.inOut');
+      revealWorlds();                                            // Planeten/Bahnen/Gürtel materialisieren
+      await wait(1500);                                          // kurz wirken lassen
+      descendToShip();
+    };
+
+    // Reduced-Motion / kein GSAP: sofort einrichten
     if (reduceMotion || !window.gsap) {
-      fireNova();
+      fireNova(); revealWorlds();
       realm = 'main'; placeShipHome();
       _shipFwd.set(0, 0, -1).applyQuaternion(shipState.quat);
       chaseCamPosition(_camDesired); camera.position.copy(_camDesired);
@@ -2873,51 +3213,52 @@ function runIntro() {
 
     introActive = true;
     cards.forEach(c => { c.mesh.visible = false; }); // Karten leben im Tunnel; im Haupt-Realm verborgen
+    hideWorlds();                                     // Planeten erst in Phase E (idempotent)
+    if (shipPivot) shipPivot.scale.setScalar(0.0001); // Schiff bis Phase F unsichtbar klein halten
 
-    // Phase A: von WEIT AUSSEN durchs ganze System spiralen, hinab zum Loch
-    const turns = 2.0;
-    const startR = 2000, endR = 175, startY = 880, endY = 64, startAng = Math.PI * 0.15;
-    const s = { t: 0 };
-    introTween = gsap.to(s, {
-      t: 1, duration: 3.6, ease: 'power1.inOut',
+    // === PHASE D: am SL — alles dreht sich schnell, dann riesige Explosion; Kamera fährt nach außen ===
+    // D1: enges, immer schnelleres Kreisen ums Schwarze Loch
+    const spin = { t: 0 };
+    introTween = gsap.to(spin, {
+      t: 1, duration: 2.2, ease: 'power2.in',                    // beschleunigt in den Ausbruch
       onUpdate: () => {
-        const e = s.t;
-        const ang = startAng + e * turns * Math.PI * 2;
-        const r = startR + (endR - startR) * e;
-        const y = startY + (endY - startY) * e;
-        camera.position.set(Math.cos(ang) * r, y, Math.sin(ang) * r);
+        const ang = startAng + spin.t * spin.t * Math.PI * 4.5;  // dreht zunehmend schneller
+        const r = INTRO_BH_R - spin.t * 35;                      // zieht leicht enger ran
+        camera.position.set(Math.cos(ang) * r, INTRO_BH_Y, Math.sin(ang) * r);
         camera.lookAt(center);
       },
       onComplete: () => {
         introTween = null;
-        // Phase B: SUPERNOVA – von außen sichtbar, Kamera kreist langsam weiter
-        fireNova();
-        const hold = { t: 0 };
-        const baseAng = startAng + turns * Math.PI * 2;
-        introTween = gsap.to(hold, {
-          t: 1, duration: 2.2, ease: 'sine.inOut',
+        fireNova();                                              // EXPLOSION – riesig, von nah
+        finalFlash();
+        // D2: während der Explosion fährt die Kamera nach AUSSEN (von außen betrachten)
+        const baseAng = startAng + Math.PI * 4.5;
+        const out = { t: 0 };
+        introTween = gsap.to(out, {
+          t: 1, duration: 3.2, ease: 'power2.out',               // schnell raus, dann sanft auslaufend
           onUpdate: () => {
-            const ang = baseAng + hold.t * 0.5;
-            const sh = (1 - hold.t) * (1 - hold.t) * 2.2; // Kamera-Shake, klingt ab
+            const ang = baseAng + out.t * 0.9;                   // dreht langsam weiter
+            const r = (INTRO_BH_R - 35) + out.t * 1500;          // nach außen
+            const y = INTRO_BH_Y + out.t * 260;                  // leicht anheben
+            const sh = (1 - out.t) * (1 - out.t) * 7;            // Shake klingt ab
             camera.position.set(
-              Math.cos(ang) * endR + (Math.random() - 0.5) * sh,
-              endY + (Math.random() - 0.5) * sh,
-              Math.sin(ang) * endR + (Math.random() - 0.5) * sh
+              Math.cos(ang) * r + (Math.random() - 0.5) * sh,
+              y + (Math.random() - 0.5) * sh,
+              Math.sin(ang) * r + (Math.random() - 0.5) * sh,
             );
             camera.lookAt(center);
           },
-          onComplete: () => { introTween = null; finalFlash(); settleIntoShip(); },  // Finale -> ins Schiff
+          onComplete: () => { introTween = null; goOverview(); }, // -> Overview -> Schiff
         });
       },
     });
 
-    // Skip: direkt Supernova -> Finale -> ins Schiff
+    // Skip (Taste): direkt Supernova -> Overview -> Schiff
     introFinish = () => {
       if (introTween) { introTween.kill(); introTween = null; }
       introFinish = null;
-      fireNova();
-      finalFlash();
-      settleIntoShip();
+      fireNova(); finalFlash();
+      goOverview();
     };
   });
 }
@@ -2938,27 +3279,91 @@ async function enterUniverse() {
   }
 
   lockScroll();
-  // weicher Button -> Warp Übergang
-  if (window.gsap && !reduceMotion) {
-    gsap.to('.gateway-buttons', { opacity: 0, scale: 1.12, duration: 0.4, ease: 'power2.in' });
-  }
-  await wait(reduceMotion ? 0 : 260);
+  const gateway = document.getElementById('gateway');
+  const hasGSAP = window.gsap && !reduceMotion;
 
+  // === PHASE A: Der Nebel hinten wächst und füllt langsam den ganzen Bildschirm ===
+  if (hasGSAP) {
+    const tl = gsap.timeline();
+
+    // Text + Buttons verschwinden
+    tl.to('.gateway-content', { opacity: 0, y: -30, scale: 1.04, duration: 0.6, ease: 'power2.in' }, 0);
+    // Scroll-Indikator ausblenden
+    tl.to('.gateway-scroll', { opacity: 0, duration: 0.3 }, 0);
+
+    // Orbital-Ringe beschleunigen + vergrößern + verschwinden
+    tl.to('.g-ring', { opacity: 0, scale: 2.6, duration: 1.2, ease: 'power2.in' }, 0.15);
+
+    // Portal-Expand Overlay (fullscreen Nebel-Gradient) erzeugen
+    if (!portalExpandEl) {
+      portalExpandEl = document.createElement('div');
+      portalExpandEl.className = 'gateway-portal-expand';
+      document.body.appendChild(portalExpandEl);
+    }
+
+    // Core/Nebel wächst langsam vom Punkt zum bildschirmfüllenden Glow (~2s)
+    tl.to('.g-core', {
+      scale: 170, opacity: 1, duration: 2.0, ease: 'power2.in',
+      boxShadow: '0 0 400px 200px rgba(166, 124, 255, 0.95), 0 0 800px 400px rgba(112, 214, 255, 0.5)',
+    }, 0.2);
+    tl.to(portalExpandEl, { opacity: 1, duration: 1.4, ease: 'power1.in' }, 0.7);
+
+    // Partikel verschwinden
+    if (window.fadeParticles) tl.call(() => window.fadeParticles(0), null, 0.5);
+
+    await tl;
+  } else {
+    await wait(100);
+  }
+
+  // Szene vorbereiten (läuft hinter Nebel/Warp)
+  if (!scenePreInited) {
+    overlay.classList.add('is-preloaded');
+  }
   openOverlay();
   helpDismissed = false;
   if (helpEl) helpEl.classList.remove('is-hidden');
   const ready = initSceneOnce();
   onResize();
-  viewMode = 'inside'; realm = 'main';   // Schiff ist stets aktiv (kein Outside/Dome-Umschalter mehr)
-  await Promise.race([runWarp(false), wait(1600)]);
-  await Promise.race([ready, wait(3000)]);
-  startLoop();
-  setCameraIntroStart();      // Kamera weit weg, bevor das Overlay sichtbar wird
-  revealOverlay();
-  fadeOutWarp();              // Warp blendet weich in die Szene über (Crossfade)
-  if (!musicReady) initAudio(); else fadeMusicIn();   // Ambient-Musik (Klick = gültige Nutzergeste)
-  busy = false;               // ab hier kann der Nutzer interagieren / überspringen / verlassen
-  runIntro();                 // läuft im Hintergrund: Anflug -> Supernova -> Karten -> einschwenken
+  viewMode = 'inside'; realm = 'main';
+
+  // === PHASE B+C: Nebel fadet in den Warp; der Warp hält ein paar Sekunden ===
+  warpCanvas.classList.add('is-scroll-warp');
+  const WARP_HOLD = 5.4;                          // Sekunden, die der Warp "stehen" bleibt (4–8s)
+  const warpHold = hasGSAP ? runWarpHold(WARP_HOLD) : runWarp(false);
+  // Nebel-Overlay sanft in den Warp übergehen lassen
+  if (hasGSAP && portalExpandEl) {
+    gsap.to(portalExpandEl, { opacity: 0, duration: 1.2, ease: 'power2.out', delay: 0.6 });
+  }
+
+  // Szene bereit machen, Kamera dicht ans SL setzen, Loader weg — alles noch hinter dem Warp
+  await Promise.race([ready, wait(4000)]);
+  if (!running) startLoop();
+  setCameraIntroStart();           // Kamera dicht am SL (Phase D-Start)
+  hideWorlds();                    // Planeten/Bahnen verstecken — erscheinen erst in Phase E
+  if (loadingEl) loadingEl.classList.add('is-hidden');
+  overlay.classList.add('is-visible');
+  if (hasGSAP) gsap.set(overlay, { opacity: 0 });   // hinter dem Warp unsichtbar halten
+
+  // Warp bis zum Ende laufen lassen …
+  await warpHold;
+
+  // … dann smooth in die 3D-Szene (am SL) überblenden
+  if (hasGSAP) {
+    gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 1.1, ease: 'power2.out' });
+    fadeOutWarp();
+    setTimeout(() => warpCanvas.classList.remove('is-scroll-warp'), 900);
+  } else {
+    revealOverlay();
+    fadeOutWarp();
+  }
+
+  // Gateway z-index zurücksetzen
+  if (gateway) gateway.classList.remove('is-transitioning');
+
+  if (!musicReady) initAudio(); else fadeMusicIn();
+  busy = false;
+  runIntro();                      // Phasen D, E, F
 }
 
 function cancelIntro() {
@@ -2967,37 +3372,54 @@ function cancelIntro() {
   introActive = false;
 }
 
-async function exitToClassic(reverse) {
-  if (busy) return;
-  busy = true;
+async function smoothExit(scrollTarget) {
+  const hasGSAP = window.gsap && !reduceMotion;
+
   cancelIntro();
   fadeMusicOut();
   if (starmapOpen) toggleStarmap(false);
   if (spaghetti) resetSpaghetti();
   if (focused) { focused = null; hideDetail(); }
-  if (reverse) await Promise.race([runWarp(true), wait(1500)]);
+  if (focusedPlanet) { focusedPlanet = null; hideDetail(); }
+
+  if (hasGSAP) {
+    // Reverse-Warp + Overlay-Fadeout gleichzeitig (cross-fade)
+    warpCanvas.classList.add('is-scroll-warp');
+    runWarp(true);
+    gsap.to(overlay, { opacity: 0, duration: 0.8, ease: 'power2.in' });
+    await wait(800);
+  } else {
+    await Promise.race([runWarp(true), wait(1500)]);
+  }
+
   stopLoop();
   closeOverlay();
   hideWarp();
+  warpCanvas.classList.remove('is-scroll-warp');
+
+  // Partikel zurückholen
+  if (window.fadeParticles) window.fadeParticles(1);
+
   unlockScroll();
-  scrollToEl('#explorations');
+
+  if (scrollTarget === 'top') {
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+  } else {
+    scrollToEl('#explorations');
+  }
+}
+
+async function exitToClassic(reverse) {
+  if (busy) return;
+  busy = true;
+  await smoothExit('projects');
   busy = false;
 }
 
 async function backToTop() {
   if (busy) return;
   busy = true;
-  cancelIntro();
-  fadeMusicOut();
-  if (starmapOpen) toggleStarmap(false);
-  if (spaghetti) resetSpaghetti();
-  if (focused) { focused = null; hideDetail(); }
-  await Promise.race([runWarp(true), wait(1500)]);
-  stopLoop();
-  closeOverlay();
-  hideWarp();
-  unlockScroll();
-  window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+  await smoothExit('top');
   busy = false;
 }
 
@@ -3084,7 +3506,7 @@ function toggleStarmap(force) {
     starmapEl.setAttribute('aria-hidden', String(!starmapOpen));
   }
 }
-const STARMAP_RANGE = 900;        // Weltradius, der auf den Kartenrand abgebildet wird
+const STARMAP_RANGE = 10000;        // Weltradius, der auf den Kartenrand abgebildet wird
 function starmapScale() {
   if (!starmapCanvas) return 1;
   return (starmapCanvas.width * 0.5 - 14) / STARMAP_RANGE;
@@ -3153,7 +3575,7 @@ function drawStarmap() {
     const px = cx + pl.worldPos.x * s, py = cy + pl.worldPos.z * s;
     starmapCtx.fillStyle = pl.data.accent;
     starmapCtx.beginPath();
-    starmapCtx.arc(px, py, Math.max(3, pl.data.size * 0.32), 0, Math.PI * 2);
+    starmapCtx.arc(px, py, Math.max(3, pl.data.size * 0.04), 0, Math.PI * 2);
     starmapCtx.fill();
     starmapCtx.fillStyle = 'rgba(230,236,255,0.85)';
     starmapCtx.font = '9px "Space Mono", monospace';
@@ -3215,7 +3637,7 @@ function onStarmapClick(ev) {
     const d = Math.hypot(pl.worldPos.x - wx, pl.worldPos.z - wz);
     if (d < bd) { bd = d; best = pl; }
   }
-  if (best && bd < 120 && realm === 'main') {
+  if (best && bd < 1000 && realm === 'main') {
     toggleStarmap(false);
     focusPlanet(best);
   }
@@ -3224,6 +3646,7 @@ function onStarmapClick(ev) {
 /* ---- Verdrahtung ---- */
 function wire() {
   setupScrollLayers();
+  setupPreInit();
 
   enterBtn && enterBtn.addEventListener('click', enterUniverse);
   projBtn && projBtn.addEventListener('click', () => scrollToEl('#explorations'));

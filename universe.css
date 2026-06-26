@@ -25,13 +25,17 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
     padding: 100px 20px;
     overflow: hidden;
     z-index: 2;
-    /* Tieferes Schwarz für das "Deep Space"-Gefühl */
+    /* Keine harten Ränder/Block: das tiefere "Deep Space"-Schwarz blendet an den
+       Kanten transparent aus und verschmilzt nahtlos mit den Nachbar-Sektionen. */
     background:
-        radial-gradient(ellipse at 50% 40%, rgba(166, 124, 255, 0.10) 0%, transparent 55%),
-        radial-gradient(ellipse at 50% 60%, rgba(112, 214, 255, 0.08) 0%, transparent 60%),
-        linear-gradient(180deg, var(--color-background) 0%, #02040c 45%, var(--color-background) 100%);
-    border-top: 1px solid rgba(58, 80, 107, 0.35);
-    border-bottom: 1px solid rgba(58, 80, 107, 0.35);
+        radial-gradient(ellipse at 50% 45%, rgba(166, 124, 255, 0.10) 0%, transparent 55%),
+        radial-gradient(ellipse at 50% 55%, rgba(112, 214, 255, 0.07) 0%, transparent 60%),
+        linear-gradient(180deg,
+            transparent 0%,
+            rgba(2, 4, 12, 0.55) 30%,
+            rgba(2, 4, 12, 0.7) 50%,
+            rgba(2, 4, 12, 0.55) 70%,
+            transparent 100%);
 }
 
 /* Dekorative, langsam rotierende Orbital-Ringe hinter den Buttons */
@@ -176,6 +180,21 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
 }
 .gateway-scroll { color: rgba(232, 232, 240, 0.25); }
 
+/* Portal-Expand Transition (Core wächst über den Screen) */
+.gateway-section.is-transitioning { z-index: 2600; }
+.gateway-portal-expand {
+    position: fixed;
+    inset: 0;
+    z-index: 2498;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(circle at 50% 50%,
+        rgba(166, 124, 255, 0.9) 0%,
+        rgba(112, 214, 255, 0.4) 30%,
+        rgba(2, 3, 10, 0.95) 60%,
+        #02030a 100%);
+}
+
 /* ----------------------------------------------------------------
    2) Warp-Transition Canvas
    ---------------------------------------------------------------- */
@@ -190,6 +209,7 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
     pointer-events: none;
 }
 #warp-canvas.is-active { display: block; }
+#warp-canvas.is-scroll-warp { z-index: 2499; }
 
 /* Projekt-Zähler im HUD */
 .u-counter {
@@ -297,12 +317,13 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
     position: fixed;
     inset: 0;
     z-index: 2500;
-    display: none;
-    background: #02030a;
+    visibility: hidden;
     opacity: 0;
-    transition: opacity 0.6s ease;
+    background: #02030a;
+    pointer-events: none;
 }
-#universe-overlay.is-open { display: block; }
+#universe-overlay.is-preloaded { visibility: visible; opacity: 0; pointer-events: none; }
+#universe-overlay.is-open { visibility: visible; pointer-events: auto; }
 #universe-overlay.is-visible { opacity: 1; }
 
 #universe-canvas {
@@ -416,6 +437,38 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
 }
 .u-hud-btn:hover { border-color: var(--color-accent-secondary); color: #fff; box-shadow: 0 0 12px rgba(112, 214, 255, 0.3); }
 .u-hud-btn:focus-visible { outline: 2px solid var(--color-accent-secondary); outline-offset: 2px; }
+
+/* HUD-Toast: kurze Statusmeldung (Orbit eingeleitet / verlassen) */
+.u-toast {
+    position: absolute;
+    top: 86px; left: 50%;
+    transform: translate(-50%, -18px);
+    z-index: 14;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 86vw;
+    padding: 11px 20px;
+    background: rgba(13, 17, 32, 0.82);
+    border: 1px solid var(--color-accent, rgba(58, 80, 107, 0.7));
+    border-radius: 26px;
+    color: var(--color-text-primary);
+    font-family: var(--font-secondary);
+    font-size: 0.86rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 22px var(--color-accent-glow, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.u-toast.is-show { opacity: 1; transform: translate(-50%, 0); }
+.u-toast i { color: var(--color-accent, var(--color-accent-primary)); font-size: 0.95rem; }
+.u-toast .u-toast-strong { color: #fff; }
+@media (max-width: 760px) { .u-toast { top: auto; bottom: 92px; font-size: 0.78rem; padding: 9px 16px; } }
+@media (prefers-reduced-motion: reduce) { .u-toast { transition: opacity 0.2s ease; transform: translate(-50%, 0); } }
 
 /* Hilfe-/Hinweisleiste unten */
 .u-help {
@@ -794,7 +847,7 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
 @media (prefers-reduced-motion: reduce) {
     .g-ring, .g-core { animation: none; }
     .gateway-btn::before { display: none; }
-    #universe-overlay { transition: none; }
     .u-glitch.is-active { animation: none; }
     .u-starmap { transition: none; }
+    .gateway-portal-expand { display: none; }
 }

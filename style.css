@@ -198,6 +198,7 @@ button:hover ~ .cursor-trail {
     position: relative;
     z-index: 2;
     background-color: transparent;
+    scroll-margin-top: 20px;
 }
 
 .section-title {
