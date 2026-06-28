@@ -86,6 +86,7 @@ const reticleLabel   = document.getElementById('u-reticle-label');
 const counterEl      = document.getElementById('u-counter');
 const speedCanvas    = document.getElementById('u-speed');
 const speedCtx       = speedCanvas ? speedCanvas.getContext('2d') : null;
+const warpCtx        = warpCanvas ? warpCanvas.getContext('2d') : null;
 const musicBtn       = document.getElementById('u-music');
 const starmapEl      = document.getElementById('u-starmap');
 const starmapBtn     = document.getElementById('u-starmap-btn');
@@ -197,7 +198,7 @@ function setupPreInit() {
 function runWarp(reverse = false, opts = {}) {
   return new Promise((resolve) => {
     if (reduceMotion) { resolve(); return; }
-    const ctx = warpCanvas.getContext('2d');
+    const ctx = warpCtx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const dur = opts.short ? 850 : (reverse ? 1100 : 1400);
 
@@ -259,8 +260,7 @@ function hideWarp() {
   warpCanvas.classList.remove('is-active');
   warpCanvas.style.opacity = '';
   warpCanvas.style.transition = '';
-  const ctx = warpCanvas.getContext('2d');
-  ctx.clearRect(0, 0, warpCanvas.width, warpCanvas.height);
+  if (warpCtx) warpCtx.clearRect(0, 0, warpCanvas.width, warpCanvas.height);
 }
 function fadeOutWarp() {
   warpCanvas.style.transition = 'opacity 0.8s ease';
@@ -274,7 +274,7 @@ function fadeOutWarp() {
 function runWarpHold(holdSec) {
   return new Promise((resolve) => {
     if (reduceMotion) { resolve(); return; }
-    const ctx = warpCanvas.getContext('2d');
+    const ctx = warpCtx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     warpCanvas.width  = Math.floor(window.innerWidth  * dpr);
     warpCanvas.height = Math.floor(window.innerHeight * dpr);
@@ -339,12 +339,18 @@ function sizeSpeedCanvas() {
   speedCanvas.width = Math.floor(window.innerWidth * dpr);
   speedCanvas.height = Math.floor(window.innerHeight * dpr);
 }
+let speedDirty = false;   // ob aktuell Streaks auf dem Speed-Canvas liegen
 function drawSpeed(speed) {
   if (!speedCtx) return;
+  const k = Math.min(1, Math.max(0, (speed - 400) / (FLY_MAX - 400)));
+  if (k <= 0.01) {
+    // Nichts zu zeichnen: nur auf der fallenden Flanke EINMAL leeren, danach Arbeit sparen
+    if (speedDirty) { speedCtx.clearRect(0, 0, speedCanvas.width, speedCanvas.height); speedDirty = false; }
+    return;
+  }
+  speedDirty = true;
   const W = speedCanvas.width, H = speedCanvas.height;
   speedCtx.clearRect(0, 0, W, H);
-  const k = Math.min(1, Math.max(0, (speed - 400) / (FLY_MAX - 400)));
-  if (k <= 0.01) return;
   const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   speedCtx.lineCap = 'round';
@@ -372,6 +378,12 @@ const _tmpVec = new THREE.Vector3();       // Wiederverwendbarer Vektor
 const dummy = new THREE.Object3D();
 const clock = new THREE.Clock();
 const center = new THREE.Vector3(0, 0, 0);
+// Wiederverwendbare Objekte für updateLens() (vermeidet Allokationen pro Frame)
+const _lensVec = new THREE.Vector3();
+const _lensRight = new THREE.Vector3();
+const _lensEdge = new THREE.Vector3();
+const _lensHoleUv = { x: 0, y: 0, z: 0 };
+const _lensEdgeUv = { x: 0, y: 0, z: 0 };
 
 let horizon, disk, diskOccluder, photonRing, glowRim, starfield, starsBright, nebula;
 let starLayers = [];             // 3 Sternenschichten (nah/mittel/fern) für Parallaxe
@@ -382,6 +394,8 @@ let novaSystem = null;           // aktive Supernova-Partikel
 let comets = [];                 // Sternschnuppen
 let cometTimer = 0;
 let cards = [];
+let mainPickTargets = [];        // gecachte Raycast-Ziele im Hauptuniversum (Loch/Planeten/Monde/Tech)
+let visibleCardMeshes = [];      // gecachte sichtbare Karten-Meshes (pro Frame aktualisiert)
 let planets = [];               // benannte Welten (Origin/Forge/Aether/Nexus)
 let asteroidBelt = null;        // Tech-Stack-Asteroidengürtel (Partikel)
 let eclipticField = null;       // leuchtende Partikel in der Systemebene (Ekliptik)
@@ -401,6 +415,7 @@ let reticleCard = null;          // Karte im Fadenkreuz (Dome-Modus)
 let helpDismissed = false;       // Hilfe-UI nach erster Bewegung ausblenden
 let lockTarget = null;           // Lock-On-Ziel im Fadenkreuz { type, ref, name, distance }
 let lockT = 0;                   // wie lange das aktuelle Ziel anvisiert wird (Sekunden)
+let reticleFrame = 0;            // Frame-Zähler: Fadenkreuz-Raycast nur jeden 3. Frame (20Hz reicht)
 const LOCK_TIME = 0.3;           // Zeit bis "eingerastet"
 
 // Musik (Web Audio API): zwei Ambient-Tracks von Scott Buckley
@@ -749,6 +764,8 @@ function spawnMeteorShower() {
   }
 }
 let distantFlashes = [];
+// Geteilte, unveränderliche Geometrien (Pooling -> kein create/dispose-Zyklus pro Event)
+let _flashGeo = null, _cometHeadGeo = null;
 function spawnDistantFlash() {
   const r = 1500 + Math.random() * 1400;
   const th = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1);
@@ -756,7 +773,8 @@ function spawnDistantFlash() {
   const col = Math.random() > 0.5 ? 0xbcd9ff : 0xffd9a0;
   const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
   mat.toneMapped = false;
-  const m = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), mat);
+  if (!_flashGeo) _flashGeo = new THREE.SphereGeometry(8, 16, 16);
+  const m = new THREE.Mesh(_flashGeo, mat);
   m.position.copy(p); m.layers.set(LAYER_BG);
   scene.add(m);
   distantFlashes.push({ mesh: m, t: 0, life: 1.6 + Math.random() * 0.8 });
@@ -774,7 +792,7 @@ function updateAmbient(dt) {
     const e = f.t / f.life;
     f.mesh.material.opacity = Math.sin(Math.min(e, 1) * Math.PI) * 0.9;
     f.mesh.scale.setScalar(1 + e * 6);
-    if (e >= 1) { scene.remove(f.mesh); f.mesh.geometry.dispose(); f.mesh.material.dispose(); distantFlashes.splice(i, 1); }
+    if (e >= 1) { scene.remove(f.mesh); f.mesh.material.dispose(); distantFlashes.splice(i, 1); }  // geteilte Geometrie NICHT disposen
   }
 }
 function updateComets(dt) {
@@ -818,8 +836,9 @@ function spawnNewsComet() {
   line.layers.set(LAYER_BG);
   scene.add(line);
   // leuchtender Kopf
+  if (!_cometHeadGeo) _cometHeadGeo = new THREE.SphereGeometry(1.1, 16, 16);
   const head = new THREE.Mesh(
-    new THREE.SphereGeometry(1.1, 16, 16),
+    _cometHeadGeo,
     new THREE.MeshBasicMaterial({ color: 0xfff0c0 })
   );
   head.material.toneMapped = false;
@@ -868,7 +887,7 @@ function updateNewsComets(dt) {
     }
     if (c.t >= c.life) {
       scene.remove(c.line); c.line.geometry.dispose(); c.line.material.dispose();
-      scene.remove(c.head); c.head.geometry.dispose(); c.head.material.dispose();
+      scene.remove(c.head); c.head.material.dispose();   // geteilte Kopf-Geometrie NICHT disposen
       c.el.remove();
       newsComets.splice(i, 1);
     }
@@ -915,7 +934,7 @@ function diskColor(t) {
 function buildDisk() {
   // Akkurate Akkretionsscheibe als EINE Shader-Fläche (kein Partikel-Stacking
   // -> kein Ausbrennen). Temperaturgradient, Doppler-Beaming, FBM-Turbulenz.
-  const geo = new THREE.RingGeometry(DISK_INNER, DISK_OUTER, 320, 16);
+  const geo = new THREE.RingGeometry(DISK_INNER, DISK_OUTER, 128, 8);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     uniforms: { uTime: { value: 0 }, uInner: { value: DISK_INNER }, uOuter: { value: DISK_OUTER } },
@@ -961,10 +980,11 @@ function buildDisk() {
 /* ---- Schwarzes Loch: tiefschwarzer Kern + dezenter Rand/Photon-Ring ---- */
 function buildBlackHole() {
   horizon = new THREE.Mesh(
-    new THREE.SphereGeometry(BH_RADIUS, 64, 64),
+    new THREE.SphereGeometry(BH_RADIUS, 40, 40),
     new THREE.MeshBasicMaterial({ color: 0x000000 })
   );
   horizon.name = 'blackhole';
+  horizon.userData.pick = { type: 'hole', ref: null, name: 'Singularity' };  // für gebündeltes Raycasting (nur Fadenkreuz)
   scene.add(horizon);
 
   // dezenter Fresnel-Rand (Lichtsaum)
@@ -986,12 +1006,12 @@ function buildBlackHole() {
         gl_FragColor = vec4(uColor * rim * uIntensity, rim);
       }`,
   });
-  glowRim = new THREE.Mesh(new THREE.SphereGeometry(BH_RADIUS * 1.04, 64, 64), rimMat);
+  glowRim = new THREE.Mesh(new THREE.SphereGeometry(BH_RADIUS * 1.04, 40, 40), rimMat);
   scene.add(glowRim);
 
   // schmaler Photon-/Einstein-Ring (zur Kamera ausgerichtet)
   photonRing = new THREE.Mesh(
-    new THREE.TorusGeometry(BH_RADIUS * 1.14, 0.16, 18, 220),
+    new THREE.TorusGeometry(BH_RADIUS * 1.14, 0.16, 12, 128),
     new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false })
   );
   photonRing.material.toneMapped = false; // bleibt hell -> intensiver Glüh-Akzent (Einstein-Ring)
@@ -1221,7 +1241,7 @@ function makeAtmosphere(color, radius) {
       void main(){ float rim=pow(1.0-max(dot(vN,vV),0.0),2.0); gl_FragColor=vec4(uColor*rim*2.4, rim*0.95); }`,
   });
   mat.toneMapped = false;
-  return new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 32), mat);
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
 }
 
 /* ---- weiche Ring-Textur (für Aether's Ringsystem) ---- */
@@ -1244,7 +1264,7 @@ function makeRingTexture() {
 
 /* ---- Orbit-Linie: zeigt die Systemebene, genau auf der Planetenbahn ---- */
 function buildOrbitLine(p) {
-  const SEG = 256;
+  const SEG = 96;
   const pts = [];
   const axis = new THREE.Vector3(0, 0, 1);
   for (let i = 0; i <= SEG; i++) {
@@ -1273,7 +1293,7 @@ function buildPlanet(p, idx) {
   group.add(body);
 
   const mat = makePlanetMaterial(p);
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 48, 48), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 40, 40), mat);
   mesh.userData.planet = p;                    // für Raycast-Picking
   body.add(mesh);
 
@@ -1282,7 +1302,7 @@ function buildPlanet(p, idx) {
 
   // optionaler Ring (Aether)
   if (p.ring) {
-    const rg = new THREE.RingGeometry(p.ring.inner, p.ring.outer, 96);
+    const rg = new THREE.RingGeometry(p.ring.inner, p.ring.outer, 64);
     // UV so anpassen, dass die Textur radial verläuft
     const ringMat = new THREE.MeshBasicMaterial({
       map: makeRingTexture(), color: new THREE.Color(p.ring.color), transparent: true,
@@ -1305,7 +1325,9 @@ function buildPlanet(p, idx) {
     );
     moonMesh.userData.moon = m;
     group.add(moonMesh);
-    moons.push({ mesh: moonMesh, r: m.r, speed: m.speed, angle: Math.random() * Math.PI * 2, inc: (Math.random() - 0.5) * 0.6, data: m });
+    const moonObj = { mesh: moonMesh, r: m.r, speed: m.speed, angle: Math.random() * Math.PI * 2, inc: (Math.random() - 0.5) * 0.6, data: m };
+    moonMesh.userData.pick = { type: 'moon', ref: moonObj, name: m.name };  // für gebündeltes Raycasting
+    moons.push(moonObj);
   });
 
   scene.add(group);
@@ -1316,6 +1338,7 @@ function buildPlanet(p, idx) {
     angle: startAngle, orbitR: p.orbitR, orbitY: p.orbitY,
     speed: p.speed, inc: p.inc, worldPos: new THREE.Vector3(),
   };
+  mesh.userData.pick = { type: 'planet', ref: rec, name: p.name };  // für gebündeltes Raycasting
   planets.push(rec);
   return rec;
 }
@@ -1357,7 +1380,9 @@ function buildAsteroidBelt(sprite) {
     rock.userData.tech = t;
     rock.userData.baseSize = t.size * 4.4;
     scene.add(rock);
-    techRocks.push({ mesh: rock, data: t, r, y: (Math.random() - 0.5) * 20, angle: a, spin: 0.2 + Math.random() * 0.4, worldPos: new THREE.Vector3() });
+    const techObj = { mesh: rock, data: t, r, y: (Math.random() - 0.5) * 20, angle: a, spin: 0.2 + Math.random() * 0.4, worldPos: new THREE.Vector3() };
+    rock.userData.pick = { type: 'tech', ref: techObj, name: t.label };  // für gebündeltes Raycasting
+    techRocks.push(techObj);
   });
 }
 
@@ -1509,12 +1534,17 @@ function orientShipAt(pos, lookAtPoint) {
 /* ================================================================
    REALM-WECHSEL  (Wurmloch <-> Karten-Tunnel, vom Warp verdeckt)
    ================================================================ */
-function applyTunnelState() {
-  savedMainBg = scene.background;
+// Tunnel-Skybox (violette Cubemap) einmalig backen. Wird im Leerlauf vorab erzeugt
+// (siehe buildScene), damit der erste Tunnel-Eintritt nicht ruckelt.
+function ensureTunnelSkybox() {
   if (!tunnelSkybox) tunnelSkybox = bakeStarCubemap(1024, {
     bgA: '#0a0414', bgB: '#140826', nebula: ['#4a1a6a', '#6a1f8a', '#2a1a5e', '#7a2f9a'], nebAlpha: 0.08,
   });
-  scene.background = tunnelSkybox;
+  return tunnelSkybox;
+}
+function applyTunnelState() {
+  savedMainBg = scene.background;
+  scene.background = ensureTunnelSkybox();
   // Tiefen-Nebel: ferne (noch nicht enthüllte) Bereiche versinken im Dunkel -> Karten tauchen
   // dramatisch daraus auf. Dezent genug, dass nahe Karten (< ~110u) unberührt bleiben.
   savedMainFog = scene.fog;
@@ -1589,6 +1619,15 @@ function buildWorld(sprite) {
   buildAsteroidBelt(sprite);
   buildWormhole();      // Tor zum Karten-Tunnel (orbitiert das Schwarze Loch)
   buildWorldLabels();   // erzeugt nur noch den (leeren) Container für News-Kometen
+
+  // Gebündelte Raycast-Zielliste: ein intersectObjects() statt ~26 Einzelaufrufe pro Frame.
+  // Reihenfolge egal — intersectObjects sortiert nach Distanz. (Wurmloch wird separat geprüft.)
+  mainPickTargets = [horizon];
+  for (const pl of planets) {
+    mainPickTargets.push(pl.mesh);
+    for (const mo of pl.moons) mainPickTargets.push(mo.mesh);
+  }
+  for (const tr of techRocks) mainPickTargets.push(tr.mesh);
 }
 
 /* ---- Container für News-Komet-Schlagzeilen (keine Planeten-/Tech-Labels mehr:
@@ -1603,6 +1642,10 @@ function buildWorldLabels() {
 // Achse für leicht geneigte Umlaufbahnen (wiederverwendet)
 const _orbitAxis = new THREE.Vector3();
 function updateWorld(dt) {
+  // Karten-Tunnel: Das Planetensystem liegt jenseits der Far-Plane und ist unsichtbar.
+  // Sämtliche Planeten-/Mond-/Brocken-Updates wären reine Verschwendung -> überspringen.
+  // (News-Kometen laufen weiter wie bisher, damit das Verhalten identisch bleibt.)
+  if (realm === 'cards') { updateNewsComets(dt); return; }
   // Annäherungs-Stillstand: nahe an / fokussiert auf einem Planeten friert das System sanft ein.
   // (nutzt worldPos vom Vorframe -> 1 Frame Versatz, unmerklich)
   let nearest = Infinity;
@@ -1683,14 +1726,17 @@ const LensShader = {
       gl_FragColor = col;
     }`,
 };
-function projectToUv(v) {
-  const p = v.clone().project(camera);
-  return { x: p.x * 0.5 + 0.5, y: p.y * 0.5 + 0.5, z: p.z };
+function projectToUv(v, out) {
+  _lensVec.copy(v).project(camera);
+  out.x = _lensVec.x * 0.5 + 0.5;
+  out.y = _lensVec.y * 0.5 + 0.5;
+  out.z = _lensVec.z;
+  return out;
 }
 function updateLens() {
   if (!lensPass) return;
   const u = lensPass.uniforms;
-  const holeUv = projectToUv(center);
+  const holeUv = projectToUv(center, _lensHoleUv);
   const dist = camera.position.distanceTo(center);
   // hinter der Kamera -> Lensing aus
   if (holeUv.z > 1 || dist < BH_RADIUS * 1.05) { u.uActive.value = 0; return; }
@@ -1698,8 +1744,9 @@ function updateLens() {
   u.uAspect.value = window.innerWidth / window.innerHeight;
   u.uHole.value.set(holeUv.x, holeUv.y);
   // scheinbare Größe des Horizonts in UV (über einen Randpunkt bestimmen)
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-  const edgeUv = projectToUv(center.clone().addScaledVector(right, BH_RADIUS));
+  _lensRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  _lensEdge.copy(center).addScaledVector(_lensRight, BH_RADIUS);
+  const edgeUv = projectToUv(_lensEdge, _lensEdgeUv);
   let rad = Math.hypot((edgeUv.x - holeUv.x) * u.uAspect.value, edgeUv.y - holeUv.y);
   rad = Math.max(0.02, Math.min(0.32, rad));
   u.uShadow.value = rad * 0.92;
@@ -1874,7 +1921,6 @@ async function buildCards() {
 // Leucht-Gerüst, das den Tunnel klar als solchen zeigt: Querringe (Rippen) + Längsschienen,
 // die in die Tiefe laufen und im Nebel verschwinden -> echte Tunnel-Perspektive, dennoch dezent.
 function buildTunnelShell() {
-  const group = new THREE.Group();
   const R = RING_R + 14;                                 // etwas weiter außen als die Karten
   const z0 = TUNNEL_ORIGIN.z + 20, zLen = TUNNEL_LENGTH + 60;
   const mat = new THREE.LineBasicMaterial({
@@ -1883,34 +1929,39 @@ function buildTunnelShell() {
   });
   mat.toneMapped = false;
 
-  // (1) Querringe = Tunnel-Rippen
-  const segs = 72, ringPts = [];
-  for (let s = 0; s <= segs; s++) {
-    const a = s / segs * Math.PI * 2;
-    ringPts.push(new THREE.Vector3(Math.cos(a) * R, Math.sin(a) * R, 0));
-  }
-  const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPts);
-  const NR = 48;                                         // dichtere Rippung über den langen Tunnel
-  for (let i = 0; i < NR; i++) {
-    const ring = new THREE.LineLoop(ringGeo, mat);
-    ring.position.set(TUNNEL_ORIGIN.x, TUNNEL_ORIGIN.y, z0 + i / (NR - 1) * zLen);
-    group.add(ring);
-  }
+  // Alle Rippen + Schienen in EINEM LineSegments-Buffer (1 Draw-Call statt 54). Additives
+  // Blending ist reihenfolge-unabhängig -> Pixel-identisch zu den getrennten LineLoops/Lines.
+  const segs = 72, NR = 48, NL = 6;                      // 48 Querringe (72-Ecke) + 6 Längsschienen
+  const ox = TUNNEL_ORIGIN.x, oy = TUNNEL_ORIGIN.y;
+  const cx = new Float32Array(segs), cy = new Float32Array(segs);
+  for (let s = 0; s < segs; s++) { const a = s / segs * Math.PI * 2; cx[s] = Math.cos(a) * R; cy[s] = Math.sin(a) * R; }
 
+  const segCount = NR * segs + NL;                       // Anzahl Liniensegmente
+  const pos = new Float32Array(segCount * 2 * 3);
+  let o = 0;
+  // (1) Querringe = Tunnel-Rippen (geschlossener 72-Ecken-Loop: Segment s -> (s+1))
+  for (let i = 0; i < NR; i++) {
+    const z = z0 + i / (NR - 1) * zLen;
+    for (let s = 0; s < segs; s++) {
+      const n = (s + 1) % segs;
+      pos[o++] = ox + cx[s]; pos[o++] = oy + cy[s]; pos[o++] = z;
+      pos[o++] = ox + cx[n]; pos[o++] = oy + cy[n]; pos[o++] = z;
+    }
+  }
   // (2) Längsschienen = laufen die ganze Länge -> Perspektive, die in die Tiefe zieht
-  const NL = 6;
   for (let j = 0; j < NL; j++) {
     const a = j / NL * Math.PI * 2;
-    const lx = TUNNEL_ORIGIN.x + Math.cos(a) * R, ly = TUNNEL_ORIGIN.y + Math.sin(a) * R;
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(lx, ly, z0), new THREE.Vector3(lx, ly, z0 + zLen),
-    ]);
-    group.add(new THREE.Line(lineGeo, mat));
+    const lx = ox + Math.cos(a) * R, ly = oy + Math.sin(a) * R;
+    pos[o++] = lx; pos[o++] = ly; pos[o++] = z0;
+    pos[o++] = lx; pos[o++] = ly; pos[o++] = z0 + zLen;
   }
 
-  group.visible = false;
-  scene.add(group);
-  tunnelShell = group;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const shell = new THREE.LineSegments(geo, mat);
+  shell.visible = false;
+  scene.add(shell);
+  tunnelShell = shell;
 }
 
 // Fließende Leit-Ringe entlang der Achse: zeigen dem Schiff sanft den Weg zum Ausgangsportal.
@@ -1993,8 +2044,10 @@ function buildScene() {
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  // Bloom rendert auf halber Dimension (Industriestandard): der Blur überdeckt den
+  // Auflösungsunterschied vollständig, spart aber ~4x Fragment-Last im Bloom-Pass.
   bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    new THREE.Vector2(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)),
     0.42, 0.55, 0.5 // strength, radius, threshold -> dezenteres Glühen, Planeten brennen nicht aus
   );
   composer.addPass(bloomPass);
@@ -2013,6 +2066,11 @@ function buildScene() {
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('resize', onResize);
+
+  // Tunnel-Skybox im Leerlauf vorab backen (6×1024²-Canvas-Arbeit) -> kein Stutter beim
+  // ersten Wurmloch-Eintritt. applyTunnelState nutzt das Ergebnis, baked sonst nach.
+  if (window.requestIdleCallback) requestIdleCallback(ensureTunnelSkybox, { timeout: 4000 });
+  else setTimeout(ensureTunnelSkybox, 1200);
 }
 
 /* ---- Free-Look Kamera (Dome) ---- */
@@ -2313,7 +2371,7 @@ function setPointer(ev) {
 }
 function intersectCards() {
   raycaster.setFromCamera(pointer, camera);
-  return raycaster.intersectObjects(cards.filter(c => c.mesh.visible).map(c => c.mesh), false);
+  return raycaster.intersectObjects(visibleCardMeshes, false);   // pro Frame gecachte Sichtbar-Liste
 }
 function onPointerMove(ev) {
   if (isDown) dismissHelpSoon();
@@ -2375,22 +2433,20 @@ function onPointerUp(ev) {
   else if (focused) unfocusCard();
 }
 
-// Raycast gegen alle Weltobjekte; gibt das nächste mit Typ-Info zurück
+// Raycast gegen alle Weltobjekte (Planeten/Monde/Tech) in EINEM Aufruf; nächstes mit Typ-Info.
+// Das Schwarze Loch ('hole') wird hier übersprungen — onPointerUp prüft es separat per Distanz.
 function pickWorld() {
-  let best = null;
-  for (const pl of planets) {
-    const hit = raycaster.intersectObject(pl.mesh, false)[0];
-    if (hit && (!best || hit.distance < best.distance)) best = { distance: hit.distance, type: 'planet', planet: pl };
-    for (const mo of pl.moons) {
-      const mh = raycaster.intersectObject(mo.mesh, false)[0];
-      if (mh && (!best || mh.distance < best.distance)) best = { distance: mh.distance, type: 'moon', moon: mo };
-    }
+  const hits = raycaster.intersectObjects(mainPickTargets, false);
+  for (const h of hits) {
+    const p = h.object.userData.pick;
+    if (!p || p.type === 'hole') continue;
+    const best = { distance: h.distance, type: p.type };
+    if (p.type === 'planet') best.planet = p.ref;
+    else if (p.type === 'moon') best.moon = p.ref;
+    else if (p.type === 'tech') best.tech = p.ref;
+    return best;   // intersectObjects ist nach Distanz sortiert -> erster gültiger ist der nächste
   }
-  for (const tr of techRocks) {
-    const th = raycaster.intersectObject(tr.mesh, false)[0];
-    if (th && (!best || th.distance < best.distance)) best = { distance: th.distance, type: 'tech', tech: tr };
-  }
-  return best;
+  return null;
 }
 
 // Sanfte Kamerafahrt: Position UND Blickrichtung werden interpoliert (kein Sprung)
@@ -2677,21 +2733,21 @@ function pickReticleTarget() {
   // Schiffsposition zu strahlen erzeugte Parallaxe (Kamera ist versetzt) -> Ziel daneben.
   raycaster.setFromCamera(CENTER2, camera);
   let best = null;
-  const consider = (hit, info) => {
-    if (hit && (!best || hit.distance < best.distance)) { info.distance = hit.distance; best = info; }
-  };
   if (realm === 'cards') {
-    const ch = raycaster.intersectObjects(cards.filter(c => c.mesh.visible).map(c => c.mesh), false)[0];
-    if (ch) consider(ch, { type: 'card', ref: ch.object.userData.card, name: ch.object.userData.project.title });
-    if (exitPortal && exitPortal.visible) consider(raycaster.intersectObject(exitPortal.userData.hitMesh, false)[0], { type: 'exit', ref: null, name: 'Rückkehr-Portal' });
-  } else {
-    for (const pl of planets) {
-      consider(raycaster.intersectObject(pl.mesh, false)[0], { type: 'planet', ref: pl, name: pl.data.name });
-      for (const mo of pl.moons) consider(raycaster.intersectObject(mo.mesh, false)[0], { type: 'moon', ref: mo, name: mo.data.name });
+    const ch = raycaster.intersectObjects(visibleCardMeshes, false)[0];
+    if (ch) best = { distance: ch.distance, type: 'card', ref: ch.object.userData.card, name: ch.object.userData.project.title };
+    if (exitPortal && exitPortal.visible) {
+      const e = raycaster.intersectObject(exitPortal.userData.hitMesh, false)[0];
+      if (e && (!best || e.distance < best.distance)) best = { distance: e.distance, type: 'exit', ref: null, name: 'Rückkehr-Portal' };
     }
-    for (const tr of techRocks) consider(raycaster.intersectObject(tr.mesh, false)[0], { type: 'tech', ref: tr, name: tr.data.label });
-    if (wormhole && wormhole.visible) consider(raycaster.intersectObject(wormhole.userData.hitMesh, false)[0], { type: 'wormhole', ref: null, name: 'Wurmloch' });
-    consider(raycaster.intersectObject(horizon, false)[0], { type: 'hole', ref: null, name: 'Singularity' });
+  } else {
+    // Planeten/Monde/Tech/Loch in EINEM Raycast (nach Distanz sortiert -> [0] ist das Nächste)
+    const h = raycaster.intersectObjects(mainPickTargets, false)[0];
+    if (h) { const p = h.object.userData.pick; best = { distance: h.distance, type: p.type, ref: p.ref, name: p.name }; }
+    if (wormhole && wormhole.visible) {
+      const w = raycaster.intersectObject(wormhole.userData.hitMesh, false)[0];
+      if (w && (!best || w.distance < best.distance)) best = { distance: w.distance, type: 'wormhole', ref: null, name: 'Wurmloch' };
+    }
   }
   return best;
 }
@@ -2830,7 +2886,7 @@ function animate() {
     raycaster.setFromCamera(pointer, camera);
     let card = null;
     if (realm === 'cards') {
-      const hits = raycaster.intersectObjects(cards.filter(c => c.mesh.visible).map(c => c.mesh), false);
+      const hits = raycaster.intersectObjects(visibleCardMeshes, false);
       card = hits.length ? hits[0].object.userData.card : null;
       // Hysterese: aktuellen Hover halten, solange er noch getroffen wird (kein Flackern)
       if (hovered && hits.some(h => h.object.userData.card === hovered)) card = hovered;
@@ -2853,6 +2909,7 @@ function animate() {
   // tauchen vor dem Schiff aus dem Dunkel auf und verblassen nach dem Passieren wieder. Das hält
   // die Galerie übersichtlich und verhindert, dass man in weit entfernte Karten hineinfliegt.
   const refZ = (realm === 'cards') ? (shipLoaded ? shipState.pos.z : camera.position.z) : 0;
+  visibleCardMeshes.length = 0;                            // pro Frame neu aufbauen (gleicher Array, keine Allokation)
   for (const c of cards) {
     let rev = 0;
     if (realm === 'cards') {
@@ -2867,6 +2924,7 @@ function animate() {
     const vis = rev > 0.002;
     if (c.mesh.visible !== vis) c.mesh.visible = vis;
     if (!vis) continue;
+    visibleCardMeshes.push(c.mesh);                       // gecachte Sichtbar-Liste fürs Raycasting
     c.mesh.material.opacity = rev;                        // sanftes Auf-/Abblenden beim Erscheinen/Passieren
 
     const p = c.base;                                     // feste Galerie-Position
@@ -2896,7 +2954,7 @@ function animate() {
     if (gc) {
       cardGlow.visible = true;
       // leicht hinter die Karte (von der Kamera weg) -> Halo um die Ränder
-      const away = gc.mesh.position.clone().sub(camera.position).normalize();
+      const away = _tmpVec.copy(gc.mesh.position).sub(camera.position).normalize();
       cardGlow.position.copy(gc.mesh.position).addScaledVector(away, 0.4);
       cardGlow.quaternion.copy(gc.mesh.quaternion);
       const gs = gc.mesh.scale.x;
@@ -2911,10 +2969,17 @@ function animate() {
 
   // Lock-On-Fadenkreuz (Inside): visiert Karten/Planeten/Monde/Tech/Loch in der Bildmitte an
   if (viewMode === 'inside' && !focused && !focusedPlanet && !spaghetti && !introActive && !camFlying && cardsRevealed) {
-    const tgt = pickReticleTarget();
-    const same = tgt && lockTarget && tgt.type === lockTarget.type && tgt.ref === lockTarget.ref;
-    if (tgt) { lockT = same ? lockT + dt : 0; lockTarget = tgt; }
-    else { lockTarget = null; lockT = 0; }
+    // Raycast nur jeden 3. Frame (20Hz) — zwischen den Pick-Frames läuft der Lock-Timer mit dt
+    // weiter, sodass das 0.3s-Einrasten exakt gleich schnell ist (visuell identisch).
+    reticleFrame++;
+    if (reticleFrame % 3 === 0) {
+      const tgt = pickReticleTarget();
+      const same = tgt && lockTarget && tgt.type === lockTarget.type && tgt.ref === lockTarget.ref;
+      if (tgt) { lockT = same ? lockT + dt : 0; lockTarget = tgt; }
+      else { lockTarget = null; lockT = 0; }
+    } else if (lockTarget) {
+      lockT += dt;                                    // gleiches Ziel angenommen -> Timing bleibt identisch
+    }
     reticleCard = (lockTarget && lockTarget.type === 'card') ? lockTarget.ref : null;
     updateReticleLock(lockTarget, !!lockTarget && lockT >= LOCK_TIME);
   } else {
@@ -2945,6 +3010,8 @@ function onResize() {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  // composer.setSize() setzt den Bloom-Pass auf volle Dimension zurück -> erneut halbieren
+  if (bloomPass) bloomPass.setSize(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2));
   sizeSpeedCanvas();
 }
 
