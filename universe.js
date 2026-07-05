@@ -1057,6 +1057,7 @@ const WORLD = {
       icon: 'fa-user-astronaut', accent: '#ffa94d',
       title: 'Origin — Wer steckt dahinter?',
       lead: 'Die innerste Welt, eine Seite ewig dem Licht zugewandt.',
+      story: 'Alles beginnt hier: Neugier auf den Nachthimmel, erste Zeilen Code, der Drang, Dinge auseinanderzunehmen und besser wieder zusammenzusetzen. Diese Welt bleibt dem Licht zugewandt — wie ihr Bewohner den offenen Fragen.',
       facts: [
         'Lorenzo Bay-Müller — Maker, Tüftler & Physik-Begeisterter',
         'Zuhause in Frankfurt am Main',
@@ -1075,6 +1076,8 @@ const WORLD = {
       icon: 'fa-hammer', accent: '#ff6b6b',
       title: 'Forge — Was entsteht mit den Händen?',
       lead: 'Glühende Risse, sprühende Funken — die Maker-Welt.',
+      story: 'Wo Ideen physisch werden: 3D-Drucker surren, Kameras klicken, Server blinken. Auf Forge entsteht Hardware zum Anfassen — von der Fotobox bis zur AstroCam.',
+      matchTerms: ['3d', 'print', 'druck', 'fotobox', 'astrocam', 'kamera', 'camera', 'raspberry', 'hardware', 'server', 'esp', 'iot'],
       facts: [
         'Hardware, 3D-Druck & Holz — wo Bits auf Atome treffen.',
       ],
@@ -1098,6 +1101,8 @@ const WORLD = {
       icon: 'fa-atom', accent: '#a67cff',
       title: 'Aether — Was bewegt den Geist?',
       lead: 'Wirbelnde Wolkenbänder voller Formeln und Fragen.',
+      story: 'Der Denkraum: Physik, Astronomie, Datenanalyse. Hier kreisen Formeln wie Monde — und jedes Projekt ist ein Experiment mit offenem Ausgang.',
+      matchTerms: ['physik', 'physics', 'astro', 'quiz', 'gravity', 'daten', 'data', 'analytics', 'simulation', 'jufo', 'science', 'manim', 'qgis', 'karte', 'map', 'elections'],
       facts: [
         'Physik & Astronomie — von Gravitation bis Fourier',
         'Datenanalyse & Visualisierung',
@@ -1121,6 +1126,8 @@ const WORLD = {
       icon: 'fa-satellite-dish', accent: '#70d6ff',
       title: 'Nexus — Wie erreicht man dich?',
       lead: 'Kalt, klar, von Nordlichtern umspielt. Der Außenposten.',
+      story: 'Der Außenposten mit Antenne ins Netz. Drei Monde, drei Kanäle — und jedes Signal wird beantwortet. Von hier führt das Wurmloch weiter zur Projekt-Galerie.',
+      gatewayCta: true,
       facts: [
         'Drei Monde umkreisen Nexus — jeder ein Kanal nach draußen.',
       ],
@@ -1195,6 +1202,8 @@ function makePlanetMaterial(p) {
       uLava:      { value: p.type === 'lava' ? 1.0 : 0.0 },
       uAurora:    { value: p.aurora ? 1.0 : 0.0 },
       uIce:       { value: p.type === 'ice' ? 1.0 : 0.0 },
+      uCity:      { value: p.type === 'rocky' ? 1.0 : 0.0 },
+      uStorm:     { value: p.type === 'gas' ? 1.0 : 0.0 },
       uGlow:      { value: p.type === 'rocky' ? 1.0 : 0.0 },
       uGlowColor: { value: new THREE.Color(p.glow || '#ffffff') },
       uSeed:      { value: Math.random() * 10 },
@@ -1211,7 +1220,7 @@ function makePlanetMaterial(p) {
       }`,
     fragmentShader: `
       varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
-      uniform float uTime, uBands, uLava, uAurora, uIce, uGlow, uSeed;
+      uniform float uTime, uBands, uLava, uAurora, uIce, uCity, uStorm, uGlow, uSeed;
       uniform vec3 uColA, uColB, uColC, uGlowColor, uSunDir;
       ${GLSL_NOISE}
       void main(){
@@ -1224,6 +1233,13 @@ function makePlanetMaterial(p) {
 
         vec3 col = mix(uColA, uColB, smoothstep(0.30,0.62,surf));
         col = mix(col, uColC, smoothstep(0.60,0.95,surf));
+
+        // Großer Sturmwirbel auf dem Gasriesen (elliptisch, driftet langsam, gefranste Kante)
+        float lon = atan(p.z, p.x) + uTime * 0.012;
+        vec2 sc = vec2((lon - 0.9) * 0.75, (p.y + 0.28) * 1.7);
+        float stormEdge = fbm(p * 6.0 + uSeed) * 0.08;
+        float storm = (1.0 - smoothstep(0.10, 0.38 + stormEdge, length(sc))) * uStorm;
+        col = mix(col, uColC * 1.25, storm * 0.85);
 
         // Lava-Adern: scharfe, pulsierende Glut in den Rissen
         float veins = fbm(p*4.2 + uSeed*1.7);
@@ -1253,6 +1269,12 @@ function makePlanetMaterial(p) {
         float aur = smoothstep(0.55, 0.9, lat) * (1.0-diff);
         float flick = 0.5 + 0.5*sin(uTime*2.0 + p.x*8.0 + p.z*6.0);
         emissive += vec3(0.25,1.0,0.65) * aur * flick * uAurora * 0.9;
+
+        // Zivilisationslichter: warme Punkt-Cluster auf der Nachtseite der Felswelt
+        // ("hier wohnt jemand") — nur wo es dunkel ist, nie auf der Tagseite
+        float cityN = vnoise(p * 22.0 + uSeed * 3.0);
+        float city = smoothstep(0.30, 0.42, cityN) * (1.0 - smoothstep(0.20, 0.5, diff));
+        emissive += vec3(1.0, 0.72, 0.35) * city * uCity * 0.9;
 
         gl_FragColor = vec4(col + emissive, 1.0);
       }`,
@@ -1655,6 +1677,7 @@ function enterCardRealm() {
   if (focused) { focused = null; hideDetail(); }
   if (focusedPlanet) { focusedPlanet = null; hideDetail(); }
   camFlying = true; fly.keys.clear();
+  playSfx('warp');
   if (reduceMotion) { applyTunnelState(); camFlying = false; return; }
   runWarp(false).then(() => { fadeOutWarp(); camFlying = false; });
   setTimeout(applyTunnelState, 520);            // bei maximaler Warp-Abdeckung umschalten
@@ -1665,6 +1688,7 @@ function exitCardRealm() {
   if (focused) { focused = null; hideDetail(); }
   if (focusedPlanet) { focusedPlanet = null; hideDetail(); }
   camFlying = true; fly.keys.clear();
+  playSfx('warp');
   if (reduceMotion) { applyMainState(); camFlying = false; return; }
   runWarp(true).then(() => { fadeOutWarp(); camFlying = false; });
   setTimeout(applyMainState, 520);
@@ -2192,6 +2216,8 @@ function onKeyDown(e) {
   // Jede Taste (auch Escape) überspringt zuerst das Intro — Escape soll nicht
   // versehentlich das ganze Universum beenden, während man nur das Intro skippen will.
   if (introActive) { skipIntro(); return; }
+  // Terminal offen: alle Tasten gehören der Eingabezeile (Escape = zurück)
+  if (spaghetti && terminalEl && terminalEl.classList.contains('is-open')) { handleTerminalKey(e); return; }
   lastInput = performance.now();
   const k = ARROW_MAP[e.key.toLowerCase()] || e.key.toLowerCase();
   if (['w', 'a', 's', 'd', ' ', 'pitchup', 'pitchdown'].includes(k) || k === 'shift') {
@@ -2842,18 +2868,51 @@ function setPanelAccent(color) {
   }
 }
 
-/* ---- Detail-Panel: Planet-Welt ---- */
+/* ---- Projekte, die inhaltlich zu einer Welt gehören (Tag/Titel/Beschreibung-Match) ---- */
+function matchProjectsForPlanet(p) {
+  const terms = p.matchTerms || [];
+  if (!terms.length) return [];
+  return projects.filter(pr => {
+    const hay = ((pr.tags || []).join(' ') + ' ' + (pr.title || '') + ' ' + (pr.description || '')).toLowerCase();
+    return terms.some(t => hay.includes(t));
+  }).slice(0, 5);
+}
+
+/* ---- Detail-Panel: Planet-Welt ----
+   Jede Welt ist eine vollwertige Portfolio-Sektion: Story, Fakten, automatisch
+   verknüpfte Projekte und eine geführte Navigation zur nächsten Welt — so trägt
+   jeder Planet Inhalt und die Reise hat einen roten Faden (Origin -> ... -> Galerie). */
 function showPlanetDetail(p) {
   if (!detailBody) return;
   const facts = (p.facts || []).map(f => `<li>${f}</li>`).join('');
   const links = (p.links || []).map(l =>
     `<a href="${l.url}" target="_blank" rel="noopener">${l.text}<i class="${l.icon}"></i></a>`).join('');
+  const related = matchProjectsForPlanet(p);
+  const relatedHtml = related.length
+    ? `<div class="u-detail-sub">Projekte aus dieser Welt</div>
+       <div class="u-detail-links u-detail-techlinks">${related.map(pr => {
+         const url = (pr.links && pr.links[0] && pr.links[0].url) || '#';
+         return `<a href="${url}" target="_blank" rel="noopener">${pr.title}<i class="fas fa-arrow-up-right-from-square"></i></a>`;
+       }).join('')}</div>`
+    : '';
+  const idx = WORLD.planets.findIndex(x => x.id === p.id);
+  const next = WORLD.planets[(idx + 1) % WORLD.planets.length];
+  const nav = `
+    <div class="u-worldnav">
+      ${p.gatewayCta ? `<button type="button" class="u-cta-gallery" data-action="gallery"><i class="fas fa-door-open"></i> Zur Projekt-Galerie — durchs Wurmloch</button>` : ''}
+      <button type="button" class="u-worldnav-btn" data-planet="${next.id}" style="--accent:${next.accent}">
+        <span>Nächste Welt</span><strong><i class="fas ${next.icon}"></i> ${next.name}</strong><i class="fas fa-arrow-right u-worldnav-arrow"></i>
+      </button>
+    </div>`;
   detailBody.innerHTML = `
     <div class="u-detail-kicker" style="color:${p.accent}"><i class="fas ${p.icon}"></i> ${p.kind}</div>
     <h3>${p.title}</h3>
     <p>${p.lead || ''}</p>
+    ${p.story ? `<p class="u-detail-story">${p.story}</p>` : ''}
     ${facts ? `<ul class="u-detail-facts">${facts}</ul>` : ''}
     ${links ? `<div class="u-detail-links">${links}</div>` : ''}
+    ${relatedHtml}
+    ${nav}
   `;
   setPanelAccent(p.accent);
   detailEl.classList.add('is-open');
@@ -2953,6 +3012,7 @@ function pickReticleTarget() {
 // E / Enter auf eingerastetes Ziel: passende Aktion auslösen
 function activateLockTarget() {
   const t = lockTarget; if (!t) return;
+  playSfx('activate');
   if (t.type === 'card') focusCard(t.ref);
   else if (t.type === 'planet') focusPlanet(t.ref);
   else if (t.type === 'tech') focusTech(t.ref);
@@ -2974,6 +3034,7 @@ function updateReticleLock(target, locked) {
   _reticleState = key;
   reticleEl.classList.toggle('is-target', !!target);
   reticleEl.classList.toggle('is-locked', !!locked);
+  if (locked && key.endsWith(':L')) playSfx('lock');   // Einrast-Blip (nur beim Zustandswechsel)
   // Onboarding: beim allerersten Einrasten kurz erklären, dass [E] aktiviert
   if (locked && !hints.lock) {
     hints.lock = true;
@@ -2998,26 +3059,77 @@ function triggerSpaghetti() {
   } else { camera.fov = 168; camera.updateProjectionMatrix(); }
   setTimeout(showTerminal, 1100);
 }
+/* ---- Interaktives Terminal hinter dem Ereignishorizont ----
+   Kein Platzhalter mehr: kleines Retro-Terminal mit tippbaren Befehlen.
+   Escape oder 'reboot' kehren zurück. */
+let termLog = '';
+let termInput = '';
+let termReady = false;
+const TERM_BOOT =
+`> SINGULARITY BREACH DETECTED
+> Spaghettifizierung abgeschlossen ... Atome neu sequenziert.
+> Willkommen hinter dem Ereignishorizont.
+> Tippe 'help' fuer Befehle.`;
+function renderTerminal() {
+  if (!terminalText) return;
+  terminalText.textContent = termLog + '\n> ' + termInput + '_';
+}
+function termPrint(s) {
+  termLog += '\n' + s;
+  // Log begrenzen, damit das Panel nicht überläuft
+  const lines = termLog.split('\n');
+  if (lines.length > 16) termLog = lines.slice(lines.length - 16).join('\n');
+}
+function execTerminal(cmd) {
+  if (cmd) termPrint('> ' + cmd);
+  switch (cmd) {
+    case '': break;
+    case 'help':
+      termPrint("Befehle: whoami · worlds · projects · coffee · reboot"); break;
+    case 'whoami':
+      termPrint('lorenzo — Maker · Physik-Nerd · FOSS-Enthusiast');
+      termPrint('Frankfurt am Main · AstroClub · Jugend forscht'); break;
+    case 'worlds':
+      WORLD.planets.forEach(p => termPrint((discovered.has(p.id) ? '[x] ' : '[ ] ') + p.name + ' — ' + p.kind));
+      termPrint(discovered.size === WORLD.planets.length ? 'Alle Welten kartiert. Respekt.' : 'Tipp: [M] StarMap zum Anfliegen.'); break;
+    case 'projects':
+      termPrint(projects.length + ' Projekte im Orbit. Der Weg dorthin: Wurmloch -> Galerie.'); break;
+    case 'coffee':
+      termPrint('c[_]  Kaffee nachgefuellt. Reaktortemperatur stabil.'); break;
+    case 'reboot': case 'exit':
+      termPrint('Reboot des Universums ...');
+      renderTerminal();
+      setTimeout(resetSpaghetti, 500); return;
+    default:
+      termPrint("'" + cmd + "': command not found — 'help' versuchen");
+  }
+  renderTerminal();
+}
+function handleTerminalKey(e) {
+  if (e.key === 'Escape') { resetSpaghetti(); return; }
+  if (!termReady) return;
+  if (e.key === 'Enter') { const c = termInput.trim().toLowerCase(); termInput = ''; execTerminal(c); e.preventDefault(); return; }
+  if (e.key === 'Backspace') { termInput = termInput.slice(0, -1); renderTerminal(); e.preventDefault(); return; }
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && termInput.length < 42) {
+    termInput += e.key; renderTerminal(); e.preventDefault();
+  }
+}
 function showTerminal() {
   if (!terminalEl) return;
   terminalEl.classList.add('is-open');
   terminalEl.setAttribute('aria-hidden', 'false');
-  const msg =
-`> SINGULARITY BREACH DETECTED
-> spaghettification complete... atoms re-sequenced.
->
-> [PLACEHOLDER] Retro-Terminal lädt in einer zukünftigen Version.
-> Beyond the event horizon, the code continues.
->
-> _`;
-  if (terminalText) {
-    terminalText.textContent = '';
-    let i = 0;
-    const type = () => {
-      if (i <= msg.length) { terminalText.textContent = msg.slice(0, i); i++; setTimeout(type, 16); }
-    };
-    type();
-  }
+  termLog = ''; termInput = ''; termReady = false;
+  if (!terminalText) return;
+  terminalText.textContent = '';
+  let i = 0;
+  const type = () => {
+    if (i <= TERM_BOOT.length) {
+      terminalText.textContent = TERM_BOOT.slice(0, i); i++; setTimeout(type, 12);
+    } else {
+      termLog = TERM_BOOT; termReady = true; renderTerminal();
+    }
+  };
+  type();
 }
 function resetSpaghetti() {
   spaghetti = false;
@@ -3784,6 +3896,41 @@ function fadeMusicOut() {
     musicGain.gain.linearRampToValueAtTime(0, now + 0.8);
   }
 }
+/* ---- SFX: winzige synthetische Klänge (kein Asset nötig) — Lock-Blip,
+   Aktivierung, Warp-Sweep. Sehr leise, am Musik-Mute mitgekoppelt. ---- */
+function playSfx(type) {
+  if (!audioCtx || musicMuted || audioCtx.state !== 'running') return;
+  try {
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.0001, t);
+    if (type === 'lock') {
+      o.type = 'sine';
+      o.frequency.setValueAtTime(660, t);
+      o.frequency.exponentialRampToValueAtTime(990, t + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.045, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.start(t); o.stop(t + 0.2);
+    } else if (type === 'activate') {
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(440, t);
+      o.frequency.setValueAtTime(660, t + 0.09);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+      o.start(t); o.stop(t + 0.3);
+    } else if (type === 'warp') {
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(220, t);
+      o.frequency.exponentialRampToValueAtTime(55, t + 0.9);
+      g.gain.exponentialRampToValueAtTime(0.035, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+      o.start(t); o.stop(t + 1.0);
+    }
+  } catch (e) { /* Audio-Fehler nie fatal */ }
+}
+
 function fadeMusicIn() {
   if (musicMuted) return;
   if (musicGain && audioCtx) {
@@ -3871,13 +4018,22 @@ function drawStarmap() {
     starmapCtx.arc(cx, cy, Math.min(W * 0.5 - 6, pl.data.orbitR * s), 0, Math.PI * 2);
     starmapCtx.stroke();
     const px = cx + pl.worldPos.x * s, py = cy + pl.worldPos.z * s;
+    const pr = Math.max(3, pl.data.size * 0.04);
     starmapCtx.fillStyle = pl.data.accent;
     starmapCtx.beginPath();
-    starmapCtx.arc(px, py, Math.max(3, pl.data.size * 0.04), 0, Math.PI * 2);
+    starmapCtx.arc(px, py, pr, 0, Math.PI * 2);
     starmapCtx.fill();
+    // entdeckte Welten: feiner Ring (kartiert), Häkchen im Namen
+    if (discovered.has(pl.data.id)) {
+      starmapCtx.strokeStyle = pl.data.accent;
+      starmapCtx.lineWidth = 1;
+      starmapCtx.beginPath();
+      starmapCtx.arc(px, py, pr + 3.5, 0, Math.PI * 2);
+      starmapCtx.stroke();
+    }
     starmapCtx.fillStyle = 'rgba(230,236,255,0.85)';
     starmapCtx.font = '9px "Space Mono", monospace';
-    starmapCtx.fillText(pl.data.name, px + 6, py + 3);
+    starmapCtx.fillText((discovered.has(pl.data.id) ? '✓ ' : '') + pl.data.name, px + 6, py + 3);
   }
   // Asteroidengürtel (Tech) als gepunkteter Ring
   starmapCtx.strokeStyle = 'rgba(160,200,255,0.22)';
@@ -3920,7 +4076,7 @@ function drawStarmap() {
     const spd = Math.round(shipLoaded ? shipState.vel.length() : fly.vel.length());
     let near = '—', nd = Infinity;
     for (const pl of planets) { const d = probe.distanceTo(pl.worldPos); if (d < nd) { nd = d; near = pl.data.name; } }
-    starmapInfo.textContent = `Speed ${spd} u/s · nächste Welt: ${near} (${Math.round(nd)})`;
+    starmapInfo.textContent = `Speed ${spd} u/s · nächste Welt: ${near} · kartiert ${discovered.size}/${WORLD.planets.length}`;
   }
 }
 function onStarmapClick(ev) {
@@ -3957,6 +4113,19 @@ function wire() {
   starmapBtn && starmapBtn.addEventListener('click', () => toggleStarmap());
   starmapCloseBtn && starmapCloseBtn.addEventListener('click', () => toggleStarmap(false));
   starmapCanvas && starmapCanvas.addEventListener('click', onStarmapClick);
+
+  // Welt-Navigation im Detail-Panel: "Nächste Welt" springt per Autopilot weiter,
+  // die Galerie-CTA (Nexus) führt direkt durchs Wurmloch — geführte Tour ohne Flugkünste.
+  detailBody && detailBody.addEventListener('click', (e) => {
+    const nav = e.target.closest('[data-planet]');
+    if (nav) {
+      const pl = planets.find(x => x.data.id === nav.dataset.planet);
+      if (pl && realm === 'main' && !busy && !spaghetti) focusPlanet(pl);
+      return;
+    }
+    const act = e.target.closest('[data-action="gallery"]');
+    if (act) enterCardRealm();
+  });
 
   if (hintEl) {
     hintEl.textContent = (isMobile() || !hasWebGL())

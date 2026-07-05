@@ -638,6 +638,90 @@ body::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: no
 }
 .u-detail-techlinks a { font-size: 0.82rem; padding: 7px 14px; }
 
+/* Story-Absatz: erzählerischer Text, leicht abgesetzt mit Akzentkante */
+.u-detail-story {
+    padding-left: 14px;
+    border-left: 2px solid rgba(166, 124, 255, 0.4);
+    font-style: italic;
+    color: var(--color-text-secondary);
+}
+
+/* Zwischen-Überschrift ("Projekte aus dieser Welt") */
+.u-detail-sub {
+    font-family: var(--font-secondary);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    color: var(--color-accent-secondary);
+    margin: 20px 0 10px;
+    opacity: 0.85;
+}
+
+/* Welt-Navigation: geführte Tour von Welt zu Welt bis in die Galerie */
+.u-worldnav {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(58, 80, 107, 0.45);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.u-worldnav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent, #a67cff) 45%, transparent);
+    background: rgba(13, 17, 32, 0.6);
+    color: var(--color-text-secondary);
+    font-family: var(--font-secondary);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.u-worldnav-btn strong {
+    color: #fff;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+.u-worldnav-btn strong i { color: var(--accent, #a67cff); }
+.u-worldnav-arrow { margin-left: auto; color: var(--accent, #a67cff); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.u-worldnav-btn:hover {
+    border-color: var(--accent, #a67cff);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent, #a67cff) 30%, transparent);
+    transform: translateY(-1px);
+}
+.u-worldnav-btn:hover .u-worldnav-arrow { transform: translateX(5px); }
+
+/* Galerie-CTA (Nexus): der große "weiter zur Galerie"-Moment */
+.u-cta-gallery {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(112, 214, 255, 0.6);
+    background: linear-gradient(120deg, rgba(112, 214, 255, 0.16), rgba(166, 124, 255, 0.16));
+    color: #fff;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: box-shadow 0.3s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s ease;
+}
+.u-cta-gallery i { color: var(--color-accent-secondary); }
+.u-cta-gallery:hover {
+    border-color: var(--color-accent-secondary);
+    box-shadow: 0 0 24px rgba(112, 214, 255, 0.35);
+    transform: translateY(-1px);
+}
+
 /* ----------------------------------------------------------------
    3b) Schwebende Welt-Labels (Planeten, Tech-Brocken, News-Kometen)
    ---------------------------------------------------------------- */
