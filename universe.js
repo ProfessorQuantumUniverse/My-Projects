@@ -427,6 +427,17 @@ const MUSIC_VOL = 0.45;
 // StarMap
 let starmapOpen = false;
 
+// Onboarding: kontextuelle Einmal-Hinweise (pro Session) statt Text-Wand
+const hints = { lock: false, worm: false, tunnel: false, map: false };
+let idleHintT = 0;                 // Zeit bis zum StarMap-Tipp
+let hudFrame = 0;                  // Drossel für HUD-Text-Updates (kein DOM-Churn pro Frame)
+// Entdeckungs-Fortschritt: besuchte Welten (macht Exploration messbar & belohnend)
+const discovered = new Set();
+function updateHudCounter() {
+  if (!counterEl) return;
+  counterEl.textContent = `◍ ${projects.length} Projekte · Welten ${discovered.size}/${WORLD.planets.length}`;
+}
+
 let sceneBuilt = false;
 let running = false;
 let animId = null;
@@ -499,6 +510,7 @@ const ORBIT_ANG_SPEED = 0.22;    // Winkelgeschwindigkeit, mit der das Schiff de
 let orbitPhase = 'none';         // 'none' | 'transit' (Anflug) | 'orbit' (eingerastet)
 let orbitAngle = 0;              // Winkel des Schiffs um den fokussierten Planeten
 let orbitCooldown = 0;           // kurze Sperre nach dem Verlassen, damit Auto-Orbit nicht sofort wieder greift
+let lastOrbitPlanet = null;      // zuletzt verlassener Planet: fängt erst wieder ein, wenn man seinen Einflussbereich verlassen hat
 const _orbTmp  = new THREE.Vector3();
 const _orbTmp2 = new THREE.Vector3();
 const _orbQuat = new THREE.Quaternion();
@@ -822,10 +834,20 @@ function spawnNewsComet() {
   const news = WORLD.news[newsIdx % WORLD.news.length];
   newsIdx++;
   const SEG = 26;
-  // sanfter Bogen quer durchs Sichtfeld, in mittlerer Tiefe
+  // sanfter Bogen quer durchs Sichtfeld des SPIELERS: relativ zur Schiffsposition und
+  // -blickrichtung spawnen (vorher: absolut am Weltursprung -> praktisch nie sichtbar)
   const side = Math.random() < 0.5 ? -1 : 1;
-  const start = new THREE.Vector3(side * 320, 60 + Math.random() * 120, -120 - Math.random() * 160);
-  const dir = new THREE.Vector3(-side, -0.12, 0.18 + Math.random() * 0.1).normalize();
+  const anchor = shipLoaded ? shipState.pos : camera.position;
+  const q = shipLoaded ? shipState.quat : camera.quaternion;
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  const start = anchor.clone()
+    .addScaledVector(fwd, 260 + Math.random() * 160)
+    .addScaledVector(right, side * 320)
+    .add(new THREE.Vector3(0, 40 + Math.random() * 100, 0));
+  const dir = right.clone().multiplyScalar(-side)
+    .addScaledVector(fwd, 0.15)
+    .add(new THREE.Vector3(0, -0.1, 0)).normalize();
   const speed = 38 + Math.random() * 14;       // deutlich langsamer -> lesbar/klickbar
   const pos = new Float32Array(SEG * 3);
   for (let i = 0; i < SEG; i++) { pos[i * 3] = start.x; pos[i * 3 + 1] = start.y; pos[i * 3 + 2] = start.z; }
@@ -839,7 +861,8 @@ function spawnNewsComet() {
   if (!_cometHeadGeo) _cometHeadGeo = new THREE.SphereGeometry(1.1, 16, 16);
   const head = new THREE.Mesh(
     _cometHeadGeo,
-    new THREE.MeshBasicMaterial({ color: 0xfff0c0 })
+    // transparent: true, sonst greift das opacity-Fading in updateNewsComets nicht (Kopf poppte hart rein/raus)
+    new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false })
   );
   head.material.toneMapped = false;
   scene.add(head);
@@ -855,7 +878,7 @@ function spawnNewsComet() {
 const _newsVec = new THREE.Vector3();
 function updateNewsComets(dt) {
   newsTimer -= dt;
-  if (newsTimer <= 0 && newsComets.length < 1 && cardsRevealed) { spawnNewsComet(); newsTimer = 16 + Math.random() * 10; }
+  if (newsTimer <= 0 && newsComets.length < 1 && cardsRevealed && realm === 'main' && !introActive) { spawnNewsComet(); newsTimer = 16 + Math.random() * 10; }
   const w = window.innerWidth, h = window.innerHeight;
   const canShow = overlay.classList.contains('is-visible') && !spaghetti && !introActive;
   for (let i = newsComets.length - 1; i >= 0; i--) {
@@ -1171,6 +1194,7 @@ function makePlanetMaterial(p) {
       uBands:     { value: p.type === 'gas' ? 1.0 : 0.0 },
       uLava:      { value: p.type === 'lava' ? 1.0 : 0.0 },
       uAurora:    { value: p.aurora ? 1.0 : 0.0 },
+      uIce:       { value: p.type === 'ice' ? 1.0 : 0.0 },
       uGlow:      { value: p.type === 'rocky' ? 1.0 : 0.0 },
       uGlowColor: { value: new THREE.Color(p.glow || '#ffffff') },
       uSeed:      { value: Math.random() * 10 },
@@ -1187,7 +1211,7 @@ function makePlanetMaterial(p) {
       }`,
     fragmentShader: `
       varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
-      uniform float uTime, uBands, uLava, uAurora, uGlow, uSeed;
+      uniform float uTime, uBands, uLava, uAurora, uIce, uGlow, uSeed;
       uniform vec3 uColA, uColB, uColC, uGlowColor, uSunDir;
       ${GLSL_NOISE}
       void main(){
@@ -1216,6 +1240,11 @@ function makePlanetMaterial(p) {
         col *= light;
         float diff = max(diffC, diffS);
 
+        // Eiswelt: kalter Glanzpunkt des fernen Sterns (spiegelnde, gefrorene Oberfläche)
+        vec3 V = normalize(cameraPosition - vWPos);
+        float spec = pow(max(dot(reflect(-normalize(uSunDir), N), V), 0.0), 28.0);
+        col += vec3(0.7, 0.85, 1.0) * spec * uIce * 0.6;
+
         // gezeitengebundene Glut: dem Zentrum zugewandte Seite leuchtet warm
         emissive += uGlowColor * pow(diffC, 3.0) * uGlow * 1.0;
 
@@ -1238,7 +1267,7 @@ function makeAtmosphere(color, radius) {
     vertexShader: `varying vec3 vN; varying vec3 vV;
       void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
     fragmentShader: `varying vec3 vN; varying vec3 vV; uniform vec3 uColor;
-      void main(){ float rim=pow(1.0-max(dot(vN,vV),0.0),2.0); gl_FragColor=vec4(uColor*rim*2.4, rim*0.95); }`,
+      void main(){ float rim=pow(1.0-max(dot(vN,vV),0.0),3.0); gl_FragColor=vec4(uColor*rim*1.8, rim*0.8); }`,
   });
   mat.toneMapped = false;
   return new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
@@ -1297,7 +1326,9 @@ function buildPlanet(p, idx) {
   mesh.userData.planet = p;                    // für Raycast-Picking
   body.add(mesh);
 
-  const atmo = makeAtmosphere(p.accent, p.size * 1.18);
+  // 1.12 statt 1.18: engere Hülle + steilerer Fresnel-Falloff -> feiner Atmosphärensaum
+  // statt dickem Neon-Ring (wirkte auf Distanz wie ein "Spiegelei")
+  const atmo = makeAtmosphere(p.accent, p.size * 1.12);
   body.add(atmo);
 
   // optionaler Ring (Aether)
@@ -1419,7 +1450,10 @@ function buildEclipticField(sprite) {
 /* ================================================================
    WURMLOCH (Einstein-Ring + Vortex-Portal) — Tor zum Karten-Tunnel
    ================================================================ */
-const WORMHOLE_ENTER = 24;          // Distanz, ab der das Schiff "eingesogen" wird
+const WORMHOLE_ENTER = 42;          // Distanz, ab der das Schiff durchtritt (Portalradius 26 + Marge)
+const WORMHOLE_PULL_R = 300;        // Sog-Radius: ab hier zieht das Portal das Schiff sanft an
+let portalArmed = true;             // nach einem Austritt erst wieder scharf, wenn das Schiff
+                                    // den Sog-Radius verlassen hat (verhindert Sofort-Wiedereinsaugen)
 function makeVortexMaterial(tint) {
   return new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -1432,30 +1466,48 @@ function makeVortexMaterial(tint) {
         float r = length(p) * 2.0;                 // 0 = Mitte, 1 = Rand
         if (r > 1.0) discard;
         float ang = atan(p.y, p.x);
-        // nach innen rotierende Spiralarme
-        float swirl = sin(ang * 3.0 + r * 16.0 - uTime * 4.0);
-        float arms = 0.5 + 0.5 * swirl;
-        float core = pow(1.0 - r, 1.6);            // heller Kern, klingt zum Rand ab
-        vec3 col = mix(uTint, vec3(1.0), core * 0.85);
-        float a = (0.32 * arms + 0.68 * core) * smoothstep(1.0, 0.5, r);
-        gl_FragColor = vec4(col * (0.6 + core), a);
+        float tw = uTime * 1.5;
+        // zwei gegenläufige Spiral-Frequenzen -> turbulenter, "gezogener" Strudel
+        float s1 = sin(ang * 3.0 + r * 18.0 - tw * 3.4);
+        float s2 = sin(ang * 6.0 - r * 26.0 - tw * 2.2 + 1.3);
+        float arms = 0.5 + 0.32 * s1 + 0.18 * s2;
+        float core = pow(1.0 - r, 2.4);            // gleißender Kern
+        float depth = smoothstep(0.9, 0.15, r);    // Schlund: zur Mitte hin "Tiefe"
+        vec3 cool = mix(uTint, vec3(0.44, 0.88, 1.0), 0.5);
+        vec3 col = mix(uTint * 0.34, mix(uTint, cool, depth), 0.3 + 0.7 * arms);
+        col = mix(col, vec3(1.0), core * 0.9);
+        float a = (0.30 * arms * depth + 0.85 * core + 0.18 * depth) * smoothstep(1.0, 0.66, r);
+        gl_FragColor = vec4(col * (0.55 + core * 1.5 + arms * 0.25), min(a, 1.0));
       }`,
   });
 }
-// Portal-Gruppe: Torus (Einstein-Ring) + Vortex-Scheibe + spiralende Partikel
+// Portal-Gruppe: Torus (Einstein-Ring) + Vortex-Scheibe + Halo + Fernglow + Partikel
 function buildPortalGroup(ringR, tint) {
   const g = new THREE.Group();
   const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(tint), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
   ringMat.toneMapped = false;
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(ringR, ringR * 0.07, 20, 90), ringMat);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(ringR, ringR * 0.06, 20, 90), ringMat);
   g.add(ring);
+
+  // feiner Außen-Halo (rotiert gegenläufig -> lebendige Tiefe)
+  const haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(tint), transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+  haloMat.toneMapped = false;
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(ringR * 1.24, ringR * 0.015, 10, 80), haloMat);
+  g.add(halo);
+
+  // weicher Fernglow: macht das Portal schon aus großer Distanz als Leuchtpunkt sichtbar
+  const glowMat = new THREE.SpriteMaterial({ map: spriteTex, color: new THREE.Color(tint), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+  glowMat.toneMapped = false;
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.set(ringR * 7, ringR * 7, 1);
+  g.add(glow);
 
   const vortexMat = makeVortexMaterial(tint);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(ringR * 0.97, 72), vortexMat);
   g.add(disc);
 
   // spiralende Partikel im Schlund
-  const N = 150;
+  const N = 220;
   const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
   const c0 = new THREE.Color(tint), c1 = new THREE.Color('#ffffff'), tmp = new THREE.Color();
   for (let i = 0; i < N; i++) {
@@ -1475,16 +1527,17 @@ function buildPortalGroup(ringR, tint) {
   particles.material.toneMapped = false;
   g.add(particles);
 
-  g.userData = { vortexMat, ring, particles, hitMesh: disc };
+  g.userData = { vortexMat, ring, halo, glow, particles, hitMesh: disc };
   return g;
 }
 function buildWormhole() {
-  wormhole = buildPortalGroup(12, '#b07cff');
+  // deutlich größeres Portal (26 statt 12): imposantes Tor statt Mini-Wirbel
+  wormhole = buildPortalGroup(26, '#b07cff');
   scene.add(wormhole);
   portalMat = wormhole.userData.vortexMat;
 
   // Rückkehr-Portal am Ende des Karten-Tunnels (cyan), zunächst verborgen
-  exitPortal = buildPortalGroup(15, '#70e0ff');
+  exitPortal = buildPortalGroup(26, '#70e0ff');
   exitPortal.position.copy(TUNNEL_ORIGIN).add(new THREE.Vector3(0, 0, TUNNEL_LENGTH + 64));
   exitPortal.visible = false;
   scene.add(exitPortal);
@@ -1504,17 +1557,26 @@ function updateWormhole(dt) {
     wormhole.position.set(Math.cos(wormholeAngle) * WORMHOLE_ORBIT_R, 8, Math.sin(wormholeAngle) * WORMHOLE_ORBIT_R);
     wormhole.getWorldPosition(wormholeWorldPos);
     wormhole.quaternion.copy(camera.quaternion);                 // Portal blickt zur Kamera
-    portalMat.uniforms.uTime.value = elapsed;
-    wormhole.userData.particles.rotation.z += dt * 0.6;
-    wormhole.userData.ring.rotation.z += dt * 0.25;
-    if (idle && shipLoaded && shipState.pos.distanceTo(wormholeWorldPos) < WORMHOLE_ENTER) enterCardRealm();
+    animatePortal(wormhole, portalMat, dt);
+    const wdist = shipState.pos.distanceTo(wormholeWorldPos);
+    if (!portalArmed && wdist > WORMHOLE_PULL_R * 1.1) portalArmed = true;   // Sog wieder scharf
+    if (idle && shipLoaded && portalArmed && wdist < WORMHOLE_ENTER) enterCardRealm();
   } else if (exitPortal) {
     exitPortal.quaternion.copy(camera.quaternion);
-    exitPortalMat.uniforms.uTime.value = elapsed;
-    exitPortal.userData.particles.rotation.z += dt * 0.6;
-    exitPortal.userData.ring.rotation.z += dt * 0.25;
+    animatePortal(exitPortal, exitPortalMat, dt);
     if (idle && shipLoaded && shipState.pos.distanceTo(exitPortal.position) < WORMHOLE_ENTER) exitCardRealm();
   }
+}
+// Gemeinsame Portal-Animation: Vortex-Zeit, Partikel-Drall, Ring-Puls, Halo gegenläufig
+function animatePortal(portal, mat, dt) {
+  mat.uniforms.uTime.value = elapsed;
+  const u = portal.userData;
+  u.particles.rotation.z += dt * 0.6;
+  u.ring.rotation.z += dt * 0.25;
+  if (u.halo) u.halo.rotation.z -= dt * 0.4;
+  const pulse = 1 + 0.035 * Math.sin(elapsed * 2.1);
+  u.ring.scale.setScalar(pulse);
+  if (u.glow) u.glow.material.opacity = 0.36 + 0.14 * Math.sin(elapsed * 1.7);
 }
 
 /* ---- Schiff an eine Position setzen, mit Blick auf einen Zielpunkt (inkl. Chase-Cam) ---- */
@@ -1561,6 +1623,10 @@ function applyTunnelState() {
   if (exitPortal) exitPortal.visible = true;
   if (wormhole) wormhole.visible = false;
   if (starmapInfo) starmapInfo.textContent = 'Karten-Tunnel · zum Ausgangsportal fliegen';
+  showToast(hints.tunnel
+    ? '<i class="fas fa-door-open"></i> <span class="u-toast-strong">Projekt-Galerie</span>'
+    : '<i class="fas fa-door-open"></i> <span class="u-toast-strong">Projekt-Galerie</span> · den cyan Leitringen zum Ausgang folgen', '#70e0ff');
+  hints.tunnel = true;
 }
 function applyMainState() {
   if (savedMainBg) scene.background = savedMainBg;
@@ -1571,14 +1637,17 @@ function applyMainState() {
   const outward = _tmpVec.copy(wormholeWorldPos).setY(0);
   if (outward.lengthSq() < 1e-4) outward.set(1, 0, 0);
   outward.normalize();
-  const spawn = wormholeWorldPos.clone().addScaledVector(outward, 55); spawn.y = 22;
+  const spawn = wormholeWorldPos.clone().addScaledVector(outward, 90); spawn.y = 22;
   orientShipAt(spawn, center);
+  portalArmed = false;                                 // erst wieder einsaugen, wenn man den Sog-Radius verlassen hat
   cards.forEach(c => { c.mesh.visible = false; });
   if (tunnelLight) tunnelLight.intensity = 0;
   if (tunnelShell) tunnelShell.visible = false;
   if (tunnelGuide) tunnelGuide.visible = false;
   if (exitPortal) exitPortal.visible = false;
   if (wormhole) wormhole.visible = true;
+  updateHudCounter();                                  // HUD-Zähler vom Galerie- auf System-Modus zurücksetzen
+  showToast('<i class="fas fa-sun"></i> Zurück im <span class="u-toast-strong">Sonnensystem</span>', '#a67cff');
 }
 function enterCardRealm() {
   if (realm === 'cards' || busy || introActive) return;
@@ -1611,6 +1680,14 @@ function buildWorld(sprite) {
   const sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
   sun.position.set(0.4, 0.5, 1).normalize();
   scene.add(sun);
+  // … und seine SICHTBARE Quelle: ein ferner Stern exakt in Lichtrichtung (physikalisch
+  // konsistent — das Licht auf den Planeten hat jetzt einen erkennbaren Ursprung).
+  const sunCore = makeGlowSprite(0xfff8ea, 1.0);
+  sunCore.position.set(0.4, 0.5, 1).normalize().multiplyScalar(30000);
+  sunCore.scale.set(900, 900, 1);
+  const sunHalo = makeGlowSprite(0xffe9c4, 0.5);
+  sunHalo.position.copy(sunCore.position);
+  sunHalo.scale.set(3200, 3200, 1);
   // deutlich helleres Umgebungslicht -> nichts versinkt im Schwarz
   scene.add(new THREE.AmbientLight(0x4a5a78, 1.1));
 
@@ -1790,16 +1867,19 @@ function wrapText(ctx, text, x, y, maxW, lineH, maxLines) {
 function initials(title) {
   return title.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 }
-function drawCard(ctx, W, H, project, img) {
+function drawCard(ctx, W, H, project, img, idx) {
   ctx.clearRect(0, 0, W, H);
-  roundRectPath(ctx, 6, 6, W - 12, H - 12, 30);
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#101427'); bg.addColorStop(1, '#070b16');
+  // Grundfläche: tiefes Nachtblau mit diagonalem Verlauf (edler als flaches Panel)
+  roundRectPath(ctx, 6, 6, W - 12, H - 12, 28);
+  const bg = ctx.createLinearGradient(0, 0, W * 0.35, H);
+  bg.addColorStop(0, '#141b36');
+  bg.addColorStop(0.55, '#0b1024');
+  bg.addColorStop(1, '#060a18');
   ctx.fillStyle = bg; ctx.fill();
 
-  const ix = 18, iy = 18, iw = W - 36, ih = Math.round(H * 0.46);
+  const ix = 18, iy = 18, iw = W - 36, ih = Math.round(H * 0.48);
   ctx.save();
-  roundRectPath(ctx, ix, iy, iw, ih, 20); ctx.clip();
+  roundRectPath(ctx, ix, iy, iw, ih, 18); ctx.clip();
   if (img) {
     drawCover(ctx, img, ix, iy, iw, ih);
   } else {
@@ -1812,16 +1892,31 @@ function drawCard(ctx, W, H, project, img) {
     ctx.fillText(initials(project.title), ix + iw / 2, iy + ih / 2);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
-  const sh = ctx.createLinearGradient(0, iy + ih - 60, 0, iy + ih);
-  sh.addColorStop(0, 'rgba(7,11,22,0)'); sh.addColorStop(1, 'rgba(7,11,22,0.85)');
-  ctx.fillStyle = sh; ctx.fillRect(ix, iy + ih - 60, iw, 60);
+  const sh = ctx.createLinearGradient(0, iy + ih - 70, 0, iy + ih);
+  sh.addColorStop(0, 'rgba(7,11,22,0)'); sh.addColorStop(1, 'rgba(7,11,22,0.9)');
+  ctx.fillStyle = sh; ctx.fillRect(ix, iy + ih - 70, iw, 70);
   ctx.restore();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 38px Inter, sans-serif';
-  wrapText(ctx, project.title, 30, iy + ih + 52, W - 60, 44, 2);
+  // Editorial-Index ("07"): groß, halbtransparent, ragt über die Bildkante — Magazin-Look
+  if (idx !== undefined) {
+    ctx.font = '800 92px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.13)';
+    ctx.fillText(String(idx + 1).padStart(2, '0'), W - 26, iy + ih + 8);
+    ctx.textAlign = 'left';
+  }
 
-  let tx = 30; const ty = H - 70;
+  // Akzentlinie (violett -> transparent) über dem Titel
+  const accent = ctx.createLinearGradient(30, 0, 160, 0);
+  accent.addColorStop(0, '#a67cff'); accent.addColorStop(1, 'rgba(112,214,255,0)');
+  ctx.fillStyle = accent;
+  ctx.fillRect(30, iy + ih + 22, 130, 3);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 40px Inter, sans-serif';
+  wrapText(ctx, project.title, 30, iy + ih + 66, W - 60, 46, 2);
+
+  let tx = 30; const ty = H - 74;
   ctx.font = '20px "Space Mono", monospace';
   (project.tags || []).slice(0, 3).forEach(tag => {
     const tw = ctx.measureText(tag).width + 26;
@@ -1832,19 +1927,31 @@ function drawCard(ctx, W, H, project, img) {
     tx += tw + 10;
   });
 
-  ctx.fillStyle = 'rgba(166,124,255,0.9)';
-  ctx.font = '20px "Space Mono", monospace';
-  ctx.fillText('▶ Klick zum Heranfliegen', 30, H - 24);
+  ctx.fillStyle = 'rgba(166,124,255,0.85)';
+  ctx.font = '19px "Space Mono", monospace';
+  ctx.fillText('[E] öffnen · Klick = heranfliegen', 30, H - 26);
 
-  roundRectPath(ctx, 6, 6, W - 12, H - 12, 30);
-  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(166,124,255,0.55)'; ctx.stroke();
+  // Rahmen: Verlauf violett -> cyan statt flacher Linie
+  roundRectPath(ctx, 6, 6, W - 12, H - 12, 28);
+  const bd = ctx.createLinearGradient(0, 0, W, H);
+  bd.addColorStop(0, 'rgba(166,124,255,0.75)');
+  bd.addColorStop(1, 'rgba(112,214,255,0.5)');
+  ctx.lineWidth = 2.5; ctx.strokeStyle = bd; ctx.stroke();
+
+  // zarter Lichteinfall oben (innen abgeschnitten)
+  ctx.save();
+  roundRectPath(ctx, 6, 6, W - 12, H - 12, 28); ctx.clip();
+  const topGlow = ctx.createLinearGradient(0, 6, 0, 96);
+  topGlow.addColorStop(0, 'rgba(166,124,255,0.14)'); topGlow.addColorStop(1, 'rgba(166,124,255,0)');
+  ctx.fillStyle = topGlow; ctx.fillRect(6, 6, W - 12, 90);
+  ctx.restore();
 }
-function makeCardMesh(project) {
+function makeCardMesh(project, idx) {
   const CW = 512, CH = 660;
   const canvas = document.createElement('canvas');
   canvas.width = CW; canvas.height = CH;
   const ctx = canvas.getContext('2d');
-  drawCard(ctx, CW, CH, project, null);
+  drawCard(ctx, CW, CH, project, null, idx);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -1863,7 +1970,7 @@ function makeCardMesh(project) {
   if (project.image) {
     const im = new Image();
     im.crossOrigin = 'anonymous';
-    im.onload = () => { drawCard(ctx, CW, CH, project, im); tex.needsUpdate = true; };
+    im.onload = () => { drawCard(ctx, CW, CH, project, im, idx); tex.needsUpdate = true; };
     im.onerror = () => {};
     im.src = project.image;
   }
@@ -1886,7 +1993,7 @@ async function buildCards() {
   const arc = Math.PI * 2 - gap;                         // erlaubter Bogen (oben + seitlich)
   const startAng = -Math.PI / 2 + gap / 2;              // am Rand des unteren Gaps beginnen
   projects.forEach((p, i) => {
-    const mesh = makeCardMesh(p);
+    const mesh = makeCardMesh(p, i);
     const t = N > 1 ? i / (N - 1) : 0.5;                 // 0..1 entlang des Tunnels (gleichmäßiger Z-Abstand)
     const z = TUNNEL_ORIGIN.z + 40 + t * TUNNEL_LENGTH;
     const ang = startAng + ((i * PHI) % 1) * arc;        // gleichmäßig über den erlaubten Bogen, nie unten
@@ -1902,7 +2009,7 @@ async function buildCards() {
     cards.push(card);
     scene.add(mesh);
   });
-  if (counterEl) counterEl.textContent = '◍ ' + projects.length + ' projects · ' + WORLD.planets.length + ' worlds';
+  updateHudCounter();
 
   // EIN geteilter Glow-Halo (folgt der aktiven Karte) – spart 39 additive Planes
   const gMat = new THREE.MeshBasicMaterial({
@@ -1924,7 +2031,7 @@ function buildTunnelShell() {
   const R = RING_R + 14;                                 // etwas weiter außen als die Karten
   const z0 = TUNNEL_ORIGIN.z + 20, zLen = TUNNEL_LENGTH + 60;
   const mat = new THREE.LineBasicMaterial({
-    color: new THREE.Color('#7a52d6'), transparent: true, opacity: 0.16,
+    color: new THREE.Color('#7a52d6'), transparent: true, opacity: 0.22,
     blending: THREE.AdditiveBlending, depthWrite: false,
   });
   mat.toneMapped = false;
@@ -2082,7 +2189,9 @@ function applyFlyRotation() {
 const ARROW_MAP = { arrowup: 'pitchup', arrowdown: 'pitchdown', arrowleft: 'a', arrowright: 'd' };
 function onKeyDown(e) {
   if (!overlay.classList.contains('is-open')) return;
-  if (introActive && e.key !== 'Escape') { skipIntro(); return; }
+  // Jede Taste (auch Escape) überspringt zuerst das Intro — Escape soll nicht
+  // versehentlich das ganze Universum beenden, während man nur das Intro skippen will.
+  if (introActive) { skipIntro(); return; }
   lastInput = performance.now();
   const k = ARROW_MAP[e.key.toLowerCase()] || e.key.toLowerCase();
   if (['w', 'a', 's', 'd', ' ', 'pitchup', 'pitchdown'].includes(k) || k === 'shift') {
@@ -2099,6 +2208,7 @@ function onKeyDown(e) {
     else if (spaghetti) resetSpaghetti();
     else if (focusedPlanet) unfocusPlanet();
     else if (focused) unfocusCard();
+    else if (detailEl && detailEl.classList.contains('is-open')) hideDetail();  // offenes Tech-/Info-Panel zuerst schließen
     else exitToClassic(false);
   }
 }
@@ -2115,6 +2225,15 @@ function dismissHelpSoon() {
 // Shift = Boost (3x), Space = aufsteigen. Kein Absinken mehr (Pitch regelt die Höhe).
 const FLY_ACCEL = 800, FLY_DAMP = 0.95, FLY_MAX = 600, BOOST_MUL = 3;
 const FLY_ACCEL_TUNNEL = 190, FLY_MAX_TUNNEL = 125;   // im Karten-Tunnel deutlich langsamer (Ruhe & Lesezeit)
+
+/* ---- Gravitation des Schwarzen Lochs (Newton: a = GM/r²) ----
+   Am Spawn (~2800u) unmerklich (~0.4 u/s²), ab ~600u spürbarer Sog, unterhalb
+   ~60u stärker als der normale Schub -> nur noch der Boost rettet. Physikalisch
+   plausibel UND spielbar: die Dämpfung wirkt wie ein Staudruck, daher bleibt der
+   Sog kontrollierbar und endet nicht in numerischen Explosionen. */
+const BH_GM = 3.2e6;
+const BH_GRAV_MAX = 2500;        // Kappung direkt am Horizont (Integrations-Stabilität)
+let gravWarned = false;          // Warn-Toast nur einmal pro Annäherung
 function applyMovement(dt) {
   if (shipLoaded && viewMode === 'inside') return;   // im Inside-Modus übernimmt das Schiff
   const fwd = _shipFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -2180,7 +2299,54 @@ function updateShip(dt) {
   shipState.vel.multiplyScalar(Math.pow(FLY_DAMP, dt * 60));
   if (shipState.vel.length() > maxV) shipState.vel.setLength(maxV);
   if (shipState.vel.lengthSq() < 1e-6) shipState.vel.set(0, 0, 0);
+
+  // Gravitation: zieht das Schiff Richtung Singularität (nur im Hauptsystem).
+  // Nach der Geschwindigkeits-Kappung addiert, damit der Sog auch ein still
+  // stehendes Schiff erfasst und nicht vom maxV-Clamp geschluckt wird.
+  if (realm === 'main') {
+    const r = shipState.pos.length();
+    if (r > 1e-3) {
+      const g = Math.min(BH_GM / (r * r), BH_GRAV_MAX);
+      shipState.vel.addScaledVector(_orbTmp.copy(shipState.pos).multiplyScalar(-1 / r), g * dt);
+      if (g > 8 && !gravWarned) {
+        gravWarned = true;
+        showToast('<i class="fas fa-triangle-exclamation"></i> Gravitationsfeld · <span class="u-toast-strong">Sog zur Singularität nimmt zu</span>', '#ff6b6b');
+      } else if (g < 4 && gravWarned) {
+        gravWarned = false;
+      }
+    }
+    // Wurmloch-Sog: in Portalnähe wird das Schiff sanft eingesogen (quadratische Rampe
+    // -> außen kaum spürbar, direkt davor unwiderstehlich). Führt weich in enterCardRealm.
+    if (wormhole && wormhole.visible && portalArmed) {
+      _orbTmp2.copy(wormholeWorldPos).sub(shipState.pos);
+      const wd = _orbTmp2.length();
+      if (wd < WORMHOLE_PULL_R && wd > 1e-3) {
+        const k = 1 - wd / WORMHOLE_PULL_R;
+        shipState.vel.addScaledVector(_orbTmp2.multiplyScalar(1 / wd), 520 * k * k * dt);
+        if (!hints.worm) {
+          hints.worm = true;
+          showToast('<i class="fas fa-circle-notch"></i> Wurmloch-Sog · führt zur <span class="u-toast-strong">Projekt-Galerie</span>', '#b07cff');
+        }
+      }
+    }
+  }
   shipState.pos.addScaledVector(shipState.vel, dt);
+
+  // Kollisionsschutz: Planeten sind massiv — weiches Herausdrücken statt Durchfliegen
+  // (die Normalkomponente der Geschwindigkeit wird entfernt -> Gleiten an der Oberfläche)
+  if (realm === 'main') {
+    for (const pl of planets) {
+      const minD = pl.data.size * 1.06;
+      _orbTmp.copy(shipState.pos).sub(pl.worldPos);
+      const d = _orbTmp.length();
+      if (d > 1e-3 && d < minD) {
+        _orbTmp.multiplyScalar(1 / d);                       // Außennormale
+        shipState.pos.copy(pl.worldPos).addScaledVector(_orbTmp, minD);
+        const vn = shipState.vel.dot(_orbTmp);
+        if (vn < 0) shipState.vel.addScaledVector(_orbTmp, -vn);
+      }
+    }
+  }
 
   // Banking: Roll aus Tastatur-Gieren + Maus-Gier-Geschwindigkeit
   const targetRoll = -keyYaw * 0.4 - fly.yawVel * 7;
@@ -2200,7 +2366,14 @@ function updateShip(dt) {
   // (nur bei echter Fahrt -> nach ESC im Stillstand rastet es nicht sofort wieder ein)
   if (realm === 'main' && orbitCooldown <= 0 && !focused && !focusedPlanet && shipState.vel.length() > 30) {
     for (const pl of planets) {
-      if (shipState.pos.distanceTo(pl.worldPos) < pl.data.size * AUTO_ORBIT_K) { focusPlanet(pl); break; }
+      const d = shipState.pos.distanceTo(pl.worldPos);
+      // Zuletzt verlassener Planet fängt erst wieder ein, wenn man seinen Einflussbereich
+      // klar verlassen hat — sonst wird man nach ESC beim Wegfliegen sofort zurückgezogen.
+      if (pl === lastOrbitPlanet) {
+        if (d > pl.data.size * AUTO_ORBIT_K * 1.7) lastOrbitPlanet = null;
+        continue;
+      }
+      if (d < pl.data.size * AUTO_ORBIT_K) { focusPlanet(pl); break; }
     }
   }
 }
@@ -2414,14 +2587,13 @@ function onPointerUp(ev) {
     return;
   }
 
-  // Hauptuniversum: Schwarzes Loch / Wurmloch / Planeten / Tech
-  const bh = raycaster.intersectObject(horizon, false);
-  const bhDist = bh.length ? bh[0].distance : Infinity;
+  // Hauptuniversum: Wurmloch / Planeten / Tech. Ein Klick aufs Schwarze Loch beendet
+  // NICHT mehr das Erlebnis (es liegt zu oft mitten im Bild -> Fehlklick-Falle).
+  // Verlassen: bewusst per Lock-On [E] auf die Singularität, HUD-Buttons oder Escape.
   const world = pickWorld();
   const worldDist = world ? world.distance : Infinity;
   let whDist = Infinity;
   if (wormhole && wormhole.visible) { const w = raycaster.intersectObject(wormhole.userData.hitMesh, false)[0]; if (w) whDist = w.distance; }
-  if (bhDist < worldDist && bhDist < whDist) { exitToClassic(true); return; }
   if (whDist < worldDist) { enterCardRealm(); return; }
   if (world) {
     if (world.type === 'planet') focusPlanet(world.planet);
@@ -2431,6 +2603,7 @@ function onPointerUp(ev) {
   }
   if (focusedPlanet) unfocusPlanet();
   else if (focused) unfocusCard();
+  else hideDetail();   // Klick ins Leere schließt auch ein offenes Tech-Panel
 }
 
 // Raycast gegen alle Weltobjekte (Planeten/Monde/Tech) in EINEM Aufruf; nächstes mit Typ-Info.
@@ -2514,6 +2687,19 @@ function focusPlanet(pl) {
   fly.keys.clear();
   showPlanetDetail(pl.data);
   showToast('<i class="fas fa-circle-notch fa-spin"></i> Autopilot · Orbit um <span class="u-toast-strong">' + pl.data.name + '</span>', pl.data.accent);
+  // Entdeckungs-Fortschritt: erste Ankunft an einer Welt zählt (Toast leicht verzögert,
+  // damit er den Autopilot-Toast nicht überschreibt)
+  if (!discovered.has(pl.data.id)) {
+    discovered.add(pl.data.id);
+    updateHudCounter();
+    const n = discovered.size, total = WORLD.planets.length;
+    setTimeout(() => {
+      if (focusedPlanet !== pl) return;
+      showToast(n === total
+        ? '<i class="fas fa-trophy"></i> Alle Welten entdeckt · <span class="u-toast-strong">Systemkenner!</span>'
+        : `<i class="fas fa-flag"></i> Welt entdeckt · <span class="u-toast-strong">${pl.data.name}</span> (${n}/${total})`, pl.data.accent);
+    }, 2900);
+  }
   if (shipLoaded) {
     // Autopilot statt Teleport: liegt das Schiff schon nah dran -> direkt Orbit, sonst Transit-Anflug.
     const R = pl.data.size * ORBIT_RADIUS_K;
@@ -2556,6 +2742,17 @@ function updatePlanetFocus(dt) {
     if (_orbTmp.lengthSq() < 1e-4) _orbTmp.set(1, 0, 0);
     _orbTmp.normalize();
     _orbTmp2.copy(pc).addScaledVector(_orbTmp, R);           // Zielpunkt
+    // Schwarzes Loch nicht durchfliegen: kommt die direkte Anfluglinie dem Zentrum
+    // zu nahe, wird der Zielpunkt vertikal angehoben -> das Schiff zieht pro Frame
+    // nachgeführt einen weichen Bogen über die Scheibenebene statt durch das Loch.
+    _lookTarget.copy(_orbTmp2).sub(shipState.pos);
+    const segLen2 = _lookTarget.lengthSq();
+    if (segLen2 > 1) {
+      const tcl = THREE.MathUtils.clamp(-shipState.pos.dot(_lookTarget) / segLen2, 0, 1);
+      const closest = _camDesired.copy(shipState.pos).addScaledVector(_lookTarget, tcl).length();
+      const SAFE_R = 420;                                    // Sicherheitsabstand zur Singularität
+      if (closest < SAFE_R) _orbTmp2.y += (shipState.pos.y >= 0 ? 1 : -1) * (SAFE_R - closest) * 2.2;
+    }
     _shipFwd.copy(_orbTmp2).sub(shipState.pos);
     const dist = _shipFwd.length();
     const speed = Math.min(AUTOPILOT_MAX, dist * 2.4 + 30);  // Ease-out
@@ -2604,6 +2801,7 @@ function unfocusPlanet() {
   focusedPlanet = null;
   orbitPhase = 'none';
   orbitCooldown = 3.0;                       // Sperre, damit der Auto-Orbit nicht sofort wieder greift
+  lastOrbitPlanet = was || null;             // dieser Planet fängt erst nach echtem Verlassen wieder ein
   flyWarpSpeed = 0;
   hideDetail();
   if (!was) return;
@@ -2766,7 +2964,7 @@ function activateLockTarget() {
 
 // Fadenkreuz aktualisieren (Lock-On-Zustand + Label)
 let _reticleState = '';
-const LOCK_VERB = { card: 'öffnen', planet: 'anfliegen', moon: 'Link öffnen', tech: 'Projekte', wormhole: 'eintreten', exit: 'zurückkehren', hole: 'zurück' };
+const LOCK_VERB = { card: 'öffnen', planet: 'anfliegen', moon: 'Link öffnen', tech: 'Projekte', wormhole: 'eintreten', exit: 'zurückkehren', hole: 'Universum verlassen' };
 function updateReticleLock(target, locked) {
   if (!reticleEl) return;
   const show = viewMode === 'inside' && !focused && !focusedPlanet && !spaghetti && overlay.classList.contains('is-visible');
@@ -2776,6 +2974,11 @@ function updateReticleLock(target, locked) {
   _reticleState = key;
   reticleEl.classList.toggle('is-target', !!target);
   reticleEl.classList.toggle('is-locked', !!locked);
+  // Onboarding: beim allerersten Einrasten kurz erklären, dass [E] aktiviert
+  if (locked && !hints.lock) {
+    hints.lock = true;
+    showToast('<i class="fas fa-crosshairs"></i> Ziel erfasst · <span class="u-toast-strong">[E]</span> aktivieren', '#70d6ff');
+  }
   if (reticleLabel) {
     if (!target) reticleLabel.textContent = '';
     else if (locked) reticleLabel.textContent = '◉ ' + target.name + '   [E] ' + (LOCK_VERB[target.type] || '');
@@ -2853,12 +3056,39 @@ function animate() {
     updateTunnelGuide(elapsed);                        // fließende Leit-Ringe zum Ausgang
     // Tunnel-Licht reist leicht voraus mit dem Schiff -> Schiff bleibt auf ganzer Länge beleuchtet
     if (tunnelLight) tunnelLight.position.set(shipState.pos.x, shipState.pos.y + 6, shipState.pos.z + 35);
+    // Galerie-Fortschritt im HUD ("Karte 12/39") — gedrosselt auf ~3 Updates/s
+    if (counterEl && (hudFrame++ % 20) === 0) {
+      let passed = 0;
+      for (const c of cards) if (c.base.z < shipState.pos.z) passed++;
+      const txt = `◍ Galerie · Karte ${Math.min(passed + 1, cards.length)}/${cards.length}`;
+      if (counterEl.textContent !== txt) counterEl.textContent = txt;
+    }
   }
 
   // Kamera-Steuerung je nach Modus (Intro/sanfte Fahrten steuern selbst)
   if (!focused && !focusedPlanet && !spaghetti && !introActive && !camFlying) {
     if (viewMode === 'inside') { updateFly(dt); }
     else { applyMovement(dt); controls.update(); }
+    // Einmaliger Tipp nach 40s freiem Erkunden: StarMap als Abkürzung zu den Welten
+    if (realm === 'main' && cardsRevealed && !hints.map) {
+      idleHintT += dt;
+      if (idleHintT > 40) {
+        hints.map = true;
+        showToast('<i class="fas fa-map"></i> Tipp · <span class="u-toast-strong">[M]</span> StarMap: Welten direkt anfliegen', '#a67cff');
+      }
+    }
+    // Gezeitenkräfte: nahe am Horizont zittert die Kamera zunehmend (Warnung + Immersion).
+    // Additiv auf die pro Frame neu geglättete Chase-Cam -> akkumuliert nicht.
+    if (realm === 'main' && shipLoaded && viewMode === 'inside') {
+      const rr = shipState.pos.length();
+      if (rr < 420) {
+        const k = 1 - rr / 420;
+        const amp = k * k * 1.7;
+        camera.position.x += (Math.random() - 0.5) * amp;
+        camera.position.y += (Math.random() - 0.5) * amp;
+        camera.position.z += (Math.random() - 0.5) * amp;
+      }
+    }
   }
   // Planet-Fokus: Autopilot-Anflug + Orbit-Lock (Schiff fliegt selbst, kein Teleport)
   if (focusedPlanet && !camFlying) updatePlanetFocus(dt);
@@ -3529,9 +3759,10 @@ function playTrack(i) {
   musicTrack = i;
 }
 function toggleMusic() {
-  // erster Klick initialisiert Audio (Autoplay-Policy: Nutzergeste)
-  if (!musicReady) { if (!musicMuted) initAudio(); }
   musicMuted = !musicMuted;
+  // erster Klick initialisiert Audio (Autoplay-Policy: Nutzergeste) — NACH dem Toggle,
+  // damit initAudio den korrekten Mute-Zustand liest und nicht kurz anspielt
+  if (!musicReady && !musicMuted) initAudio();
   if (musicGain && audioCtx) {
     const now = audioCtx.currentTime;
     musicGain.gain.cancelScheduledValues(now);
@@ -3730,26 +3961,10 @@ function wire() {
   if (hintEl) {
     hintEl.textContent = (isMobile() || !hasWebGL())
       ? 'Tip: the 3D experience is optimized for desktop — on this device we’ll glide you straight to the classic cards.'
-      : 'Tip: drag to look · W A S D to fly · hover a card · click the black hole to return.';
+      : 'Tip: fly the ship with W A S D · aim & press E to interact · beware the black hole’s gravity.';
   }
 
   window.__universeReady = true;
 }
-
-// [DEBUG-TEMP] Verifikations-Hook — vor Commit entfernen
-window.__t = {
-  enter: () => enterCardRealm(),
-  exit: () => exitCardRealm(),
-  info: () => ({
-    realm, busy, introActive, camFlying, focused: !!focused, focusedPlanet: !!focusedPlanet, spaghetti,
-    ship: shipState.pos.toArray().map(Math.round),
-    wh: wormholeWorldPos.toArray().map(Math.round),
-    cardsVis: cards.filter(c => c.mesh.visible).length,
-    exitVis: !!(exitPortal && exitPortal.visible),
-    wormVis: !!(wormhole && wormhole.visible),
-    bg: scene.background ? (scene.background.isCubeTexture ? 'cube' : 'tex') : 'none',
-    tunnelLight: tunnelLight ? tunnelLight.intensity : -1,
-  }),
-};
 
 wire();
