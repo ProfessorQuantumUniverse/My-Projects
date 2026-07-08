@@ -6,7 +6,7 @@
     <title>Lorenzo Bay-Müller - My personal site. Universe. Physics. Code. Science.</title>
     <meta name="description" content="Portfolio of Lorenzo Bay-Müller, a digital explorer, inventor,  scientist who connects code, physics, and the universe. Discover projects and explorations.">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="universe.css?v=8">
+    <link rel="stylesheet" href="universe.css?v=9">
     <meta name="keywords" content="Lorenzo Bay-Müller, Portfolio, Webdevelopment, Python, JavaScript, Physics, Astrophysics, 3D-Printing, Drone, Science, Code, Universe">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -225,6 +225,61 @@
                 <button type="button" id="u-terminal-exit" class="u-hud-btn">&gt; reboot_universe</button>
             </div>
         </div>
+
+        <!-- ===== Planeten-Landung & Oberflächen-Modus ===== -->
+
+        <!-- Lande-Trigger (erscheint im stabilen Orbit) -->
+        <button type="button" id="u-land" class="u-land" aria-hidden="true">
+            <span class="u-land-ring" aria-hidden="true"></span>
+            <span class="u-land-core"><i class="fas fa-arrow-down" aria-hidden="true"></i></span>
+            <span class="u-land-text">Landen <kbd>L</kbd></span>
+        </button>
+
+        <!-- Plasma-/Reibungs-Blende (Atmosphäreneintritt & -austritt) -->
+        <canvas id="u-burn" class="u-burn" aria-hidden="true"></canvas>
+
+        <!-- Beam-Blitz (Warp-Pad-Teleport) -->
+        <div id="u-beamfx" class="u-beamfx" aria-hidden="true"></div>
+
+        <!-- Oberflächen-HUD -->
+        <div id="u-surface" class="u-surface" aria-hidden="true">
+            <div class="s-chip">
+                <i id="s-chip-icon" class="fas fa-globe" aria-hidden="true"></i>
+                <div class="s-chip-text">
+                    <strong id="s-chip-name"></strong>
+                    <span id="s-chip-kind"></span>
+                </div>
+            </div>
+            <div class="s-log"><i class="fas fa-book" aria-hidden="true"></i> <span id="s-log-text">Logbuch</span></div>
+            <div class="s-reticle" id="s-reticle" aria-hidden="true">
+                <span class="s-ret-ring" id="s-ret-ring"></span>
+                <span class="s-ret-dot"></span>
+                <span class="s-ret-label" id="s-ret-label"></span>
+            </div>
+            <div class="s-hint" id="s-hint">
+                <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> gehen &middot; <kbd>Shift</kbd> sprinten &middot; <kbd>E</kbd> interagieren</span>
+                <span><i class="fas fa-person-rays" aria-hidden="true"></i> Warp-Pad = Beamen &middot; <i class="fas fa-rocket" aria-hidden="true"></i> Schiff + <kbd>E</kbd> = Abflug</span>
+            </div>
+            <div class="s-lockprompt" id="s-lockprompt"><i class="fas fa-computer-mouse" aria-hidden="true"></i> Klicken zum Umsehen</div>
+        </div>
+
+        <!-- Beam-Menü (Warp-Pad) -->
+        <div id="u-beam" class="u-beam" aria-hidden="true">
+            <div class="u-beam-panel">
+                <div class="u-beam-header">
+                    <span><i class="fas fa-person-rays" aria-hidden="true"></i> Beam-Netzwerk</span>
+                    <button type="button" id="u-beam-close" class="u-starmap-x" aria-label="Beam-Menü schließen">&times;</button>
+                </div>
+                <div class="u-beam-list" id="u-beam-list"></div>
+                <div class="u-beam-foot">Direkter Transfer zwischen den Oberflächen — das Schiff wird automatisch nachgeführt.</div>
+            </div>
+        </div>
+
+        <!-- Scan-/Logbuch-Karte -->
+        <aside id="u-scan" class="u-scan" aria-hidden="true">
+            <button type="button" id="u-scan-close" class="u-detail-close" aria-label="Scan schließen">&times;</button>
+            <div class="u-scan-body" id="u-scan-body"></div>
+        </aside>
     </div>
 
     <!-- JavaScript Libraries -->
@@ -242,7 +297,7 @@
       }
     }
     </script>
-    <script type="module" src="universe.js?v=12"></script>
+    <script type="module" src="universe.js?v=19"></script>
 
     <!-- Fallback: falls das 3D-Modul (CDN) nicht lädt, bleiben die Buttons nutzbar -->
     <script>

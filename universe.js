@@ -19,6 +19,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { initSurface, enterSurface, isSurfaceActive, burnFX, forceExitSurface } from './surface.js?v=9';
 
 /* ----------------------------------------------------------------
    Konfiguration
@@ -30,8 +31,8 @@ const COL = {
 };
 
 const BH_RADIUS   = 30;       // Event-Horizont (groß & prominent)
-const DISK_INNER  = 38;
-const DISK_OUTER  = 200;
+const DISK_INNER  = 38;       // Innenrand knapp über dem Horizont (künstlerische Nähe)
+const DISK_OUTER  = 300;      // große, prominente Scheibe
 const INSIDE_HOME  = new THREE.Vector3(0, 400, 2800);  // Raumschiff-Start: weit außerhalb (Scheibe füllt nur ~1/3 Bild, dezentes Lensing), leicht erhöht, Blick zum Zentrum
 
 /* ---- Paralleluniversum: Karten-Tunnel hinter dem Wurmloch ----
@@ -94,6 +95,7 @@ const starmapCloseBtn= document.getElementById('u-starmap-close');
 const starmapCanvas  = document.getElementById('u-starmap-canvas');
 const starmapCtx     = starmapCanvas ? starmapCanvas.getContext('2d') : null;
 const starmapInfo    = document.getElementById('u-starmap-info');
+const landBtn        = document.getElementById('u-land');
 
 /* ----------------------------------------------------------------
    Hilfsfunktionen
@@ -974,24 +976,32 @@ function buildDisk() {
         float r = length(vP);
         float t = clamp((r - uInner) / (uOuter - uInner), 0.0, 1.0);
         float ang = atan(vP.y, vP.x);
-        // wirbelnde Spiralturbulenz (innen schneller via log(r))
-        float spiral = ang*1.5 - log(r)*3.5 + uTime*0.7;
-        float dust = fbm(vec2(spiral*1.1, r*0.16 + uTime*0.05));
-        dust = 0.2 + 0.95*dust;
-        // Temperatur: weiß-heiß innen -> gelb-orange -> tiefrot außen
-        vec3 white=vec3(1.0,0.98,0.95), gold=vec3(1.0,0.72,0.32), orange=vec3(1.0,0.4,0.12), cool=vec3(0.4,0.07,0.03);
+        // Kepler-Scherung: Omega ~ r^(-3/2) — innen rast das Gas, außen zieht es träge.
+        // Das Turbulenzfeld rotiert differentiell mit -> die Scheibe "fließt" echt.
+        float om = 0.55 * pow(uInner / r, 1.5);
+        float angK = ang + uTime * om;
+        // nahtlose Wirbel-Koordinaten (cos/sin statt Winkel -> kein Sprung bei ±PI)
+        vec2 sw = vec2(cos(angK), sin(angK)) * (2.2 + r * 0.015);
+        float dust = fbm(sw + vec2(r * 0.13, r * 0.09));
+        dust = 0.25 + 0.9 * dust;
+        // Temperaturprofil (Shakura-Sunjajew-artig, T ~ r^(-3/4)):
+        // weiß-heiß am Innenrand -> gold -> orange -> tiefrot außen
+        vec3 white=vec3(1.0,0.97,0.92), gold=vec3(1.0,0.72,0.32), orange=vec3(1.0,0.4,0.12), cool=vec3(0.42,0.08,0.03);
         vec3 col;
-        if (t<0.18) col = mix(white, gold, t/0.18);
-        else if (t<0.5) col = mix(gold, orange, (t-0.18)/0.32);
+        if (t<0.16) col = mix(white, gold, t/0.16);
+        else if (t<0.5) col = mix(gold, orange, (t-0.16)/0.34);
         else col = mix(orange, cool, (t-0.5)/0.5);
-        // Doppler-Beaming: eine Seite heller & bläulicher
-        float beam = 0.4 + 1.0*(0.5+0.5*cos(ang - 1.5708));
-        col = mix(col, col*vec3(0.82,0.9,1.3), clamp(beam-0.95,0.0,0.6));
-        // heller Innenrand, weiche Kanten; außen ätherisch ausdünnen
-        float edge = smoothstep(0.0,0.04,t) * (1.0 - smoothstep(0.55,1.0,t));
-        float inner = pow(1.0-t, 1.7)*1.7 + 0.22;
-        float bright = inner * beam * dust * edge;
-        float alpha = edge * (0.4 + 0.55*dust) * (0.5 + 0.5*(1.0-t));
+        // Relativistisches Beaming: die auf uns zu rotierende Seite ist deutlich
+        // heller UND blauverschoben, die wegrotierende dunkler und rotverschoben.
+        float cosb = cos(ang - 1.5708);
+        float beam = pow(0.5 + 0.5*cosb, 1.6) * 1.9 + 0.18;
+        col = mix(col * vec3(1.10, 0.86, 0.68), col * vec3(0.88, 0.96, 1.30), clamp(cosb*0.5 + 0.5, 0.0, 1.0));
+        // gleißender Innensaum + weiche Kanten; außen ätherisch ausdünnen
+        float edge = smoothstep(0.0, 0.03, t) * (1.0 - smoothstep(0.68, 1.0, t));
+        float innerHot = pow(1.0 - t, 1.6) * 2.1 + 0.6;
+        float rimFlash = (1.0 - smoothstep(0.0, 0.06, t)) * 1.5;
+        float bright = (innerHot + rimFlash) * beam * dust * edge;
+        float alpha = edge * (0.5 + 0.5*dust) * (0.55 + 0.45*(1.0-t));
         gl_FragColor = vec4(col * bright, alpha);
       }`,
   });
@@ -1034,10 +1044,18 @@ function buildBlackHole() {
 
   // schmaler Photon-/Einstein-Ring (zur Kamera ausgerichtet)
   photonRing = new THREE.Mesh(
-    new THREE.TorusGeometry(BH_RADIUS * 1.14, 0.16, 12, 128),
-    new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false })
+    new THREE.TorusGeometry(BH_RADIUS * 1.14, 0.18, 12, 128),
+    new THREE.MeshBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false })
   );
   photonRing.material.toneMapped = false; // bleibt hell -> intensiver Glüh-Akzent (Einstein-Ring)
+  // Subring höherer Ordnung: Photonen, die das Loch mehrfach umrundet haben,
+  // bilden einen zweiten, dünneren Ring dichter am Schatten (billboardet mit)
+  const subRing = new THREE.Mesh(
+    new THREE.TorusGeometry(BH_RADIUS * 1.055, 0.06, 8, 96),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  subRing.material.toneMapped = false;
+  photonRing.add(subRing);
   scene.add(photonRing);
 }
 
@@ -1049,6 +1067,8 @@ function buildBlackHole() {
    erzählt, WER hinter den Projekten steckt.
    ================================================================ */
 const WORLD = {
+  // Umlauf-Winkelgeschwindigkeiten nach Kepler: ω ∝ r^(-3/2), geankert an Origin
+  // (0.034 bei r=1800). Innere Welten überholen äußere — wie im echten System.
   planets: [
     {
       id: 'origin', name: 'Origin', kind: 'Felswelt · gezeitengebunden',
@@ -1071,7 +1091,7 @@ const WORLD = {
     },
     {
       id: 'forge', name: 'Forge', kind: 'Vulkanwelt · aktive Oberfläche',
-      type: 'lava', orbitR: 3500, orbitY: 0, size: 160, speed: 0.022, inc: 0, tilt: 0.5,
+      type: 'lava', orbitR: 3500, orbitY: 0, size: 160, speed: 0.0125, inc: 0, tilt: 0.5,
       colA: '#1c0a06', colB: '#5a1505', colC: '#ff5a1e', glow: '#ff8a2a', glowAmt: 0.0,
       icon: 'fa-hammer', accent: '#ff6b6b',
       title: 'Forge — Was entsteht mit den Händen?',
@@ -1089,13 +1109,14 @@ const WORLD = {
         { url: 'https://professorquantumuniverse.github.io/ProjectExperience/', text: 'Project Experience', icon: 'fas fa-tree' },
       ],
       moons: [
+        // Mond-ω ebenfalls keplersch: ω ∝ r^(-3/2), geankert am innersten Mond
         { name: 'Werkbank', size: 17, r: 180, speed: 0.22, color: '#ff8c5a' },
-        { name: 'Drucker', size: 12, r: 250, speed: 0.16, color: '#ffb38a' },
+        { name: 'Drucker', size: 12, r: 250, speed: 0.134, color: '#ffb38a' },
       ],
     },
     {
       id: 'aether', name: 'Aether', kind: 'Gasriese · mit Ringsystem',
-      type: 'gas', orbitR: 6000, orbitY: 0, size: 280, speed: 0.015, inc: 0, tilt: 0.42,
+      type: 'gas', orbitR: 6000, orbitY: 0, size: 280, speed: 0.0056, inc: 0, tilt: 0.42,
       colA: '#2a1a5e', colB: '#7a4bd0', colC: '#c9a8ff', glow: '#a67cff', glowAmt: 0.0,
       ring: { inner: 180, outer: 360, color: '#b79cff', tilt: 0.42 },
       icon: 'fa-atom', accent: '#a67cff',
@@ -1115,12 +1136,12 @@ const WORLD = {
       ],
       moons: [
         { name: 'AstroClub', size: 21, r: 420, speed: 0.15, color: '#c4a8ff' },
-        { name: 'Daten', size: 16, r: 530, speed: 0.11, color: '#9a78e0' },
+        { name: 'Daten', size: 16, r: 530, speed: 0.106, color: '#9a78e0' },
       ],
     },
     {
       id: 'nexus', name: 'Nexus', kind: 'Eiswelt · Polarlichter',
-      type: 'ice', orbitR: 8500, orbitY: 0, size: 140, speed: 0.011, inc: 0.30, tilt: 0.6,
+      type: 'ice', orbitR: 8500, orbitY: 0, size: 140, speed: 0.0033, inc: 0.30, tilt: 0.6,
       colA: '#0a2540', colB: '#2f7fb5', colC: '#d8f4ff', glow: '#70ffd0', glowAmt: 0.0,
       aurora: 1.0,
       icon: 'fa-satellite-dish', accent: '#70d6ff',
@@ -1138,8 +1159,8 @@ const WORLD = {
       ],
       moons: [
         { name: 'GitHub', size: 15, r: 160, speed: 0.27, color: '#e8e8ff', link: 'https://github.com/ProfessorQuantumUniverse' },
-        { name: 'F-Droid', size: 14, r: 224, speed: 0.2, color: '#9ad6a0', link: 'https://f-droid.org/packages/com.olaf.rereminder/' },
-        { name: 'Mail', size: 13, r: 290, speed: 0.15, color: '#aee6ff', link: 'mailto:lorenzobaymueller@gmail.com' },
+        { name: 'F-Droid', size: 14, r: 224, speed: 0.163, color: '#9ad6a0', link: 'https://f-droid.org/packages/com.olaf.rereminder/' },
+        { name: 'Mail', size: 13, r: 290, speed: 0.111, color: '#aee6ff', link: 'mailto:lorenzobaymueller@gmail.com' },
       ],
     },
   ],
@@ -1190,7 +1211,11 @@ const GLSL_NOISE = `
   float fbm(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<5;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
 `;
 
-/* ---- prozedurales Planeten-Material (Typ steuert Aussehen) ---- */
+/* ---- prozedurales Planeten-Material (Typ steuert Aussehen) ----
+   "Space-Engine-Pass": Domain-Warp-Höhenfeld + Relief-Normalen (Bump aus
+   finiten Differenzen), typspezifische Details (Gletscherrisse, zweiskalige
+   Lava-Adern, Gasband-Scherströmung), Wolkenschleier, knackiger Terminator
+   mit warmem Streusaum und sonnengewichteter Atmosphären-Kante. */
 function makePlanetMaterial(p) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -1208,6 +1233,9 @@ function makePlanetMaterial(p) {
       uGlowColor: { value: new THREE.Color(p.glow || '#ffffff') },
       uSeed:      { value: Math.random() * 10 },
       uSunDir:    { value: new THREE.Vector3(0.4, 0.5, 1).normalize() },
+      uAtmo:      { value: new THREE.Color(p.accent || '#88aaff') },
+      // Relief-Amplitude in WELTEINHEITEN (skaliert mit Planetenradius); Gas = 0
+      uBump:      { value: p.type === 'gas' ? 0.0 : p.size * (p.type === 'rocky' ? 0.045 : p.type === 'lava' ? 0.034 : 0.028) },
     },
     vertexShader: `
       varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
@@ -1220,96 +1248,204 @@ function makePlanetMaterial(p) {
       }`,
     fragmentShader: `
       varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
-      uniform float uTime, uBands, uLava, uAurora, uIce, uCity, uStorm, uGlow, uSeed;
-      uniform vec3 uColA, uColB, uColC, uGlowColor, uSunDir;
+      uniform float uTime, uBands, uLava, uAurora, uIce, uCity, uStorm, uGlow, uSeed, uBump;
+      uniform vec3 uColA, uColB, uColC, uGlowColor, uSunDir, uAtmo;
       ${GLSL_NOISE}
+      float fbm3(vec3 q){ float a=0.5,s=0.0; for(int i=0;i<3;i++){ s+=a*vnoise(q); q*=2.03; a*=0.5; } return s; }
+
+      // Höhenfeld fester Oberflächen: Domain-Warp + Ridged-Anteil
+      // -> Kontinente/Becken mit Gebirgszügen statt gleichförmigem Rauschen
+      float surfH(vec3 q){
+        vec3 w = q*2.4 + 0.55*vec3(fbm3(q*1.5 + uSeed), fbm3(q*1.5 + uSeed + 9.13), 0.0);
+        float b = fbm(w);
+        float r = 1.0 - abs(fbm3(w*2.15 + 3.7))*2.0;
+        return b + max(r,0.0)*max(r,0.0)*0.34;
+      }
       void main(){
         vec3 p = vObj;
-        float n = fbm(p*2.6 + uSeed);
-        // Gasriesen-Bänder: Breitengrad + wirbelnde Verzerrung
-        float warp = fbm(p*3.0 + vec3(uTime*0.04, uSeed, 0.0))*0.22;
-        float bands = sin(p.y*9.0 + warp*7.0)*0.5+0.5;
-        float surf = mix(n*0.5+0.5, bands, uBands);
+        vec3 Ng = normalize(vWNormal);
+        vec3 V = normalize(cameraPosition - vWPos);
+        vec3 S = normalize(uSunDir);
+        vec3 N = Ng;
+        vec3 emissive = vec3(0.0);
+        float h = 0.0;
+        float surf;
+        float cloud = 0.0;
 
-        vec3 col = mix(uColA, uColB, smoothstep(0.30,0.62,surf));
-        col = mix(col, uColC, smoothstep(0.60,0.95,surf));
+        // Die Typ-Uniforms sind pro Draw-Call konstant -> die Branches sind
+        // "dynamically uniform": jeder Planet bezahlt NUR seine eigenen Features.
+        if (uBands > 0.5) {
+          // ---- Gasriese: Breitenbänder mit Scherströmung, Band-Jitter, Wirbel ----
+          float flow = fbm3(p*vec3(2.2,5.5,2.2) + vec3(uTime*0.018, uSeed, 0.0));
+          float bc = p.y*6.5 + flow*1.1;
+          float bands = sin(bc*3.14159)*0.5 + 0.5;
+          float bandId = floor(bc + 0.5);
+          float bandJit = fract(sin(bandId*12.9898 + uSeed)*43758.5453);
+          surf = clamp(bands*0.72 + bandJit*0.34 + fbm3(p*8.0 + flow*2.0)*0.18, 0.0, 1.0);
+        } else {
+          // ---- feste Oberfläche: Höhenfeld + Relief aus Screen-Space-Ableitungen
+          // (Mikkelsen-Bump: EINE Höhenfeld-Auswertung, Gradient via dFdx/dFdy) ----
+          h = surfH(p);
+          vec3 dpx = dFdx(vWPos);
+          vec3 dpy = dFdy(vWPos);
+          float dhx = dFdx(h);
+          float dhy = dFdy(h);
+          vec3 r1 = cross(dpy, Ng);
+          vec3 r2 = cross(Ng, dpx);
+          float det = dot(dpx, r1);
+          vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
+          N = normalize(abs(det) * Ng - uBump * grad);
+          // 0.44er-Mittelpunkt: Gebirgskämme erreichen colC, dominieren aber nicht
+          surf = clamp(h*0.52 + 0.44, 0.0, 1.0);
+        }
 
-        // Großer Sturmwirbel auf dem Gasriesen (elliptisch, driftet langsam, gefranste Kante)
-        float lon = atan(p.z, p.x) + uTime * 0.012;
-        vec2 sc = vec2((lon - 0.9) * 0.75, (p.y + 0.28) * 1.7);
-        float stormEdge = fbm(p * 6.0 + uSeed) * 0.08;
-        float storm = (1.0 - smoothstep(0.10, 0.38 + stormEdge, length(sc))) * uStorm;
-        col = mix(col, uColC * 1.25, storm * 0.85);
+        vec3 col = mix(uColA, uColB, smoothstep(0.28, 0.62, surf));
+        col = mix(col, uColC, smoothstep(0.60, 0.95, surf));
+        col *= 0.94 + 0.12*vnoise(p*9.0 + uSeed*3.1);      // Mikrovariation (1 Tap)
 
-        // Lava-Adern: scharfe, pulsierende Glut in den Rissen
-        float veins = fbm(p*4.2 + uSeed*1.7);
-        float ridge = 1.0 - smoothstep(0.0, 0.06, abs(veins));
-        float pulse = 0.55 + 0.45*sin(uTime*1.6 + veins*12.0);
-        vec3 emissive = vec3(1.0,0.42,0.10) * ridge * pulse * uLava * 1.6;
-        col = mix(col, col*0.35, uLava*0.6);
+        if (uStorm > 0.5) {
+          // Großer Sturmwirbel (Gas): Oval mit gefranster Spiralstruktur
+          float lon = atan(p.z, p.x) + uTime * 0.012;
+          vec2 sc = vec2((lon - 0.9) * 0.75, (p.y + 0.28) * 1.7);
+          float stormEdge = fbm3(p * 6.0 + uSeed) * 0.10;
+          float storm = 1.0 - smoothstep(0.10, 0.36 + stormEdge, length(sc));
+          float swirl = 0.5 + 0.5*sin(atan(sc.y, sc.x)*3.0 + length(sc)*22.0 - uTime*0.35);
+          col = mix(col, mix(uColC*1.3, vec3(1.0), 0.25), storm * (0.55 + 0.4*swirl));
+        }
 
-        // Beleuchtung: warmes Zentrumslicht (Schwarzes Loch) + ferner Sonnenstern + starkes Ambient
-        vec3 N = normalize(vWNormal);
-        float diffC = clamp(dot(N, normalize(-vWPos)), 0.0, 1.0);   // vom Zentrum
-        float diffS = clamp(dot(N, normalize(uSunDir)), 0.0, 1.0);  // vom fernen Stern
-        float light = 0.5 + 0.55 * diffC + 0.5 * diffS;             // hell genug, nichts versinkt
-        col *= light;
+        if (uIce > 0.5) {
+          // Eiswelt: helle Firn-Hochflächen, Gletscherrisse, Polkappen
+          col = mix(col, uColC, smoothstep(0.45, 0.80, surf) * 0.55);
+          float icrack = 1.0 - smoothstep(0.0, 0.05, abs(fbm3(p*3.6 + uSeed*2.0) + fbm3(p*7.7)*0.25));
+          col = mix(col, uColA*0.65, icrack * 0.6);
+          col = mix(col, vec3(0.93,0.97,1.0), smoothstep(0.55, 0.85, abs(p.y)) * 0.55);
+        }
+
+        if (uLava > 0.5) {
+          // Lavawelt: dunkle Kruste + zweiskaliges Glut-Adernetz + Seen in den Becken
+          col *= 0.50;
+          float v1 = abs(fbm(p*4.2 + uSeed*1.7));
+          float v2 = abs(fbm3(p*9.5 + uSeed*0.7));
+          float crack = max(1.0 - smoothstep(0.0, 0.06, v1), (1.0 - smoothstep(0.0, 0.045, v2))*0.65);
+          float heat = crack * (0.6 + 0.4*sin(uTime*1.5 + h*16.0));
+          emissive += mix(vec3(1.0,0.22,0.04), vec3(1.0,0.85,0.45), crack*crack) * heat * 2.0;
+          float pool = smoothstep(0.80, 0.94, 1.0 - surf);
+          emissive += vec3(1.0,0.35,0.08) * pool * (0.7 + 0.3*sin(uTime + uSeed));
+        } else if (uBands < 0.5) {
+          // Wolkenschleier (Fels/Eis): dünne, träge ziehende Schicht
+          float cl = fbm3(p*2.3 + vec3(uTime*0.01, uSeed*5.0, 0.0) + h*0.4);
+          cloud = smoothstep(0.30, 0.62, cl) * 0.5;
+          col = mix(col, vec3(0.96,0.97,1.0), cloud);
+        }
+
+        // ---- Beleuchtung: Zentrum (BH) + ferner Stern · knackiger Terminator ----
+        float diffC = clamp(dot(N, normalize(-vWPos)), 0.0, 1.0);
+        float diffS = clamp(dot(N, S), 0.0, 1.0);
+        float wrapS = clamp((dot(N, S) + 0.22) / 1.22, 0.0, 1.0);
+        col *= 0.32 + 0.40*diffC + 0.85*wrapS;
+
+        // Terminator: warmer Streulicht-Saum am Tag/Nacht-Übergang
+        float term = smoothstep(0.0, 0.14, diffS) * (1.0 - smoothstep(0.14, 0.40, diffS));
+        col += uAtmo * term * 0.22;
+
+        // Limb Darkening (Gas) + Atmosphären-Dunst am Rand (sonnengewichtet)
+        float ndv = clamp(dot(N, V), 0.0, 1.0);
+        col *= 1.0 - uBands * 0.42 * pow(1.0 - ndv, 1.7);
+        float fres = pow(1.0 - ndv, 2.6);
+        col += uAtmo * fres * (0.10 + 0.45*wrapS);
+
+        // Eiswelt: kalter Glanzpunkt des fernen Sterns
+        if (uIce > 0.5) {
+          float spec = pow(max(dot(reflect(-S, N), V), 0.0), 40.0);
+          col += vec3(0.75, 0.88, 1.0) * spec * 0.85;
+        }
+
         float diff = max(diffC, diffS);
 
-        // Eiswelt: kalter Glanzpunkt des fernen Sterns (spiegelnde, gefrorene Oberfläche)
-        vec3 V = normalize(cameraPosition - vWPos);
-        float spec = pow(max(dot(reflect(-normalize(uSunDir), N), V), 0.0), 28.0);
-        col += vec3(0.7, 0.85, 1.0) * spec * uIce * 0.6;
-
         // gezeitengebundene Glut: dem Zentrum zugewandte Seite leuchtet warm
-        emissive += uGlowColor * pow(diffC, 3.0) * uGlow * 1.0;
+        if (uGlow > 0.5) emissive += uGlowColor * pow(diffC, 3.0);
 
-        // Polarlichter: hohe Breitengrade auf der Nachtseite schimmern grün/cyan
-        float lat = abs(p.y);
-        float aur = smoothstep(0.55, 0.9, lat) * (1.0-diff);
-        float flick = 0.5 + 0.5*sin(uTime*2.0 + p.x*8.0 + p.z*6.0);
-        emissive += vec3(0.25,1.0,0.65) * aur * flick * uAurora * 0.9;
+        // Polarlichter: hohe Breitengrade auf der Nachtseite
+        if (uAurora > 0.5) {
+          float aur = smoothstep(0.55, 0.9, abs(p.y)) * (1.0 - diff);
+          float flick = 0.5 + 0.5*sin(uTime*2.0 + p.x*8.0 + p.z*6.0);
+          emissive += vec3(0.25, 1.0, 0.65) * aur * flick * 0.9;
+        }
 
-        // Zivilisationslichter: warme Punkt-Cluster auf der Nachtseite der Felswelt
-        // ("hier wohnt jemand") — nur wo es dunkel ist, nie auf der Tagseite
-        float cityN = vnoise(p * 22.0 + uSeed * 3.0);
-        float city = smoothstep(0.30, 0.42, cityN) * (1.0 - smoothstep(0.20, 0.5, diff));
-        emissive += vec3(1.0, 0.72, 0.35) * city * uCity * 0.9;
+        // Zivilisationslichter: Cluster im Tiefland der Nachtseite, leicht gekörnt
+        if (uCity > 0.5) {
+          float cityN = vnoise(p * 26.0 + uSeed * 3.0);
+          float plains = 1.0 - smoothstep(0.15, 0.5, abs(h));
+          float city = smoothstep(0.30, 0.42, cityN) * plains * (1.0 - smoothstep(0.20, 0.5, diff));
+          emissive += vec3(1.0, 0.72, 0.35) * city * (0.7 + 0.3*vnoise(p*90.0));
+        }
 
-        gl_FragColor = vec4(col + emissive, 1.0);
+        // Wolken decken Emissives ab (Lichter scheinen nicht durch die Schicht)
+        gl_FragColor = vec4(col + emissive * (1.0 - cloud), 1.0);
       }`,
   });
 }
 
-/* ---- weiche Atmosphären-/Glow-Hülle (Fresnel, additiv) ---- */
+/* ---- Atmosphären-Hülle: Fresnel-Saum mit SONNENGEWICHTETER Streuung ----
+   Die Tagseite streut hell (innen weißlich, außen Planetenfarbe), die
+   Nachtseite bleibt ein hauchdünner Restschimmer — statt des früheren,
+   rundum gleich hellen "Donuts". Gleiche Hüllen-Geometrie (1.12x, BackSide). */
 function makeAtmosphere(color, radius) {
   const mat = new THREE.ShaderMaterial({
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide,
-    uniforms: { uColor: { value: new THREE.Color(color) } },
-    vertexShader: `varying vec3 vN; varying vec3 vV;
-      void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
-    fragmentShader: `varying vec3 vN; varying vec3 vV; uniform vec3 uColor;
-      void main(){ float rim=pow(1.0-max(dot(vN,vV),0.0),3.0); gl_FragColor=vec4(uColor*rim*1.8, rim*0.8); }`,
+    uniforms: {
+      uColor:  { value: new THREE.Color(color) },
+      uSunDir: { value: new THREE.Vector3(0.4, 0.5, 1).normalize() },
+    },
+    vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vWN;
+      void main(){
+        vN = normalize(normalMatrix * normal);
+        vWN = normalize(mat3(modelMatrix) * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `varying vec3 vN; varying vec3 vV; varying vec3 vWN;
+      uniform vec3 uColor; uniform vec3 uSunDir;
+      void main(){
+        float rim = pow(1.0 - max(dot(vN, vV), 0.0), 3.0);
+        float sunW = pow(clamp(dot(normalize(vWN), normalize(uSunDir))*0.5 + 0.5, 0.0, 1.0), 1.5);
+        vec3 tint = mix(uColor, vec3(1.0), rim * 0.22);   // dichteste Streuung innen -> leicht weißlich
+        gl_FragColor = vec4(tint * rim * (0.35 + 1.0*sunW), rim * (0.22 + 0.42*sunW));
+      }`,
   });
   mat.toneMapped = false;
-  return new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 32), mat);
 }
 
-/* ---- weiche Ring-Textur (für Aether's Ringsystem) ---- */
+/* ---- Ring-Textur (Aether): feine Strata + Cassini-artige Lücken ---- */
 function makeRingTexture() {
-  const w = 256, h = 16;
+  const w = 512, h = 16;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const ctx = c.getContext('2d');
+  // markante Teilungen: [Position 0..1, Breite]
+  const gaps = [[0.30, 0.030], [0.55, 0.014], [0.74, 0.020], [0.88, 0.010]];
   for (let x = 0; x < w; x++) {
     const t = x / w;
-    const band = 0.4 + 0.6 * Math.abs(Math.sin(t * 22) * Math.sin(t * 7));
-    const edge = Math.sin(t * Math.PI);               // außen weich auslaufend
-    const a = Math.min(1, band * edge * 1.2);
+    // vielskalige Strata (dichte feine Ringel + breite Zonen)
+    const strata = 0.45
+      + 0.28 * Math.abs(Math.sin(t * 151) * 0.6 + Math.sin(t * 61) * 0.4)
+      + 0.27 * Math.abs(Math.sin(t * 23) * Math.sin(t * 7.3));
+    const grain = 0.85 + 0.3 * vnoise(t * 90, 3.7);
+    // Lücken multiplizieren die Dichte weg
+    let gapMul = 1;
+    for (const [g, gw] of gaps) {
+      const d = (t - g) / gw;
+      gapMul *= 1 - Math.exp(-d * d);
+    }
+    const edge = Math.pow(Math.sin(t * Math.PI), 0.65);   // außen/innen weich auslaufend
+    const a = Math.min(1, strata * grain * gapMul * edge * 1.25);
     ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
     ctx.fillRect(x, 0, 1, h);
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
   return tex;
 }
 
@@ -1336,6 +1472,102 @@ function buildOrbitLine(p) {
 }
 
 /* ---- ein Planetensystem (Planet + Atmosphäre + Ring + Monde) ---- */
+/* ---- geteilte Mond-Maps: Albedo + Bump, per Material-Farbe getintet ----
+   EIN 512²-Bake für ALLE Monde: Maria-Becken, Krater nach Potenzgesetz
+   (viele kleine, wenige große) mit Ejecta-Halo und lichtseitigem Rim,
+   zwei junge Strahlenkrater. Die Bump-Kopie entsteht VOR den (flachen)
+   Strahlen -> Krater reagieren echt aufs Licht, Strahlen bleiben Albedo. */
+let _moonMaps = null;
+function makeMoonMaps() {
+  if (_moonMaps) return _moonMaps;
+  const s = 512;
+  const c = document.createElement('canvas'); c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  // Grundton: drei Noise-Oktaven -> Hochland-Flecken
+  const img = ctx.createImageData(s, s);
+  for (let y = 0; y < s; y++) {
+    for (let x = 0; x < s; x++) {
+      const n = (vnoise(x * 0.025, y * 0.025) - 0.5)
+        + (vnoise(x * 0.07, y * 0.07) - 0.5) * 0.5
+        + (vnoise(x * 0.19, y * 0.19) - 0.5) * 0.25;
+      const v = Math.max(0, Math.min(255, Math.round(182 + n * 105)));
+      const i = (y * s + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // Maria: große, dunkle Basaltbecken
+  for (let i = 0; i < 5; i++) {
+    const x = Math.random() * s, y = Math.random() * s, r = 46 + Math.random() * 96;
+    const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
+    g.addColorStop(0, 'rgba(38,40,46,0.42)');
+    g.addColorStop(0.7, 'rgba(38,40,46,0.22)');
+    g.addColorStop(1, 'rgba(38,40,46,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  // Krater: Potenzgesetz-Größen, feste Lichtannahme aus Nordwest
+  const bigCraters = [];
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * s, y = Math.random() * s;
+    const r = 2 + 58 * Math.pow(Math.random(), 3.2);
+    if (r > 22) bigCraters.push({ x, y, r });
+    // Ejecta-Halo (nur größere Einschläge)
+    if (r > 14) {
+      const eg = ctx.createRadialGradient(x, y, r, x, y, r * 2.2);
+      eg.addColorStop(0, 'rgba(238,238,244,0.10)');
+      eg.addColorStop(1, 'rgba(238,238,244,0)');
+      ctx.fillStyle = eg;
+      ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+    // Schüsselboden: Schattenseite dunkler (Licht kommt von NW -> Schatten im NW-Innenrand)
+    const g = ctx.createRadialGradient(x - r * 0.18, y - r * 0.18, r * 0.05, x, y, r);
+    g.addColorStop(0, 'rgba(30,31,36,0.55)');
+    g.addColorStop(0.62, 'rgba(58,60,66,0.34)');
+    g.addColorStop(1, 'rgba(58,60,66,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    // Randwall: heller Bogen auf der lichtabgewandten Innenseite (SO)
+    ctx.strokeStyle = `rgba(255,255,255,${(0.14 + Math.min(0.2, r * 0.008)).toFixed(3)})`;
+    ctx.lineWidth = Math.max(1, r * 0.13);
+    ctx.beginPath(); ctx.arc(x, y, r * 0.92, Math.PI * 0.05, Math.PI * 0.95); ctx.stroke();
+    // feine dunkle Kante gegenüber
+    ctx.strokeStyle = 'rgba(20,20,24,0.25)';
+    ctx.lineWidth = Math.max(1, r * 0.09);
+    ctx.beginPath(); ctx.arc(x, y, r * 0.96, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+  }
+  // Bump-Kopie VOR den Strahlen (Strahlen sind flach, nur Albedo)
+  const bc = document.createElement('canvas'); bc.width = bc.height = s;
+  bc.getContext('2d').drawImage(c, 0, 0);
+  // Strahlensysteme: zwei junge Krater schleudern helle Streifen weit hinaus
+  const raySources = bigCraters.slice(0, 2);
+  while (raySources.length < 2) raySources.push({ x: Math.random() * s, y: Math.random() * s, r: 20 });
+  for (const src of raySources) {
+    const nRays = 22 + Math.floor(Math.random() * 12);
+    for (let i = 0; i < nRays; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const len = src.r * (2.5 + Math.random() * 5.5);
+      const g = ctx.createLinearGradient(src.x, src.y, src.x + Math.cos(a) * len, src.y + Math.sin(a) * len);
+      g.addColorStop(0, 'rgba(255,255,255,0.16)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 0.8 + Math.random() * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(src.x + Math.cos(a) * src.r * 0.9, src.y + Math.sin(a) * src.r * 0.9);
+      ctx.lineTo(src.x + Math.cos(a) * len, src.y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  const bump = new THREE.CanvasTexture(bc);   // linear (kein sRGB) — Höheninterpretation
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  _moonMaps = { map, bump };
+  return _moonMaps;
+}
+
 function buildPlanet(p, idx) {
   const orbitLine = buildOrbitLine(p);         // dezente Bahnlinie auf der Ekliptik
 
@@ -1363,18 +1595,30 @@ function buildPlanet(p, idx) {
     });
     ringMat.toneMapped = false;
     const ring = new THREE.Mesh(rg, ringMat);
-    ring.rotation.x = Math.PI / 2 - p.ring.tilt;
+    // Ring liegt in der ÄQUATOR-Ebene — die sichtbare Neigung kommt aus der
+    // Achsneigung des Körpers (physikalisch korrekt statt separatem Ring-Tilt)
+    ring.rotation.x = Math.PI / 2;
     body.add(ring);
   }
 
+  // Achsneigung außen, Eigenrotation innen -> der Körper dreht um seine GENEIGTE
+  // Achse (mit Standard-'XYZ' würde er um die Welt-Y-Achse taumeln)
+  body.rotation.order = 'ZYX';
   body.rotation.z = p.tilt || 0;
+  // schnelle Rotatoren sind abgeplattet (Jupiter ~6%) — nur der Gasriese
+  if (p.type === 'gas') body.scale.y = 0.95;
 
   // Monde
   const moons = [];
   (p.moons || []).forEach((m) => {
+    const maps = makeMoonMaps();
     const moonMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(m.size, 18, 18),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color(m.color), roughness: 0.85, metalness: 0.05, emissive: new THREE.Color(m.color).multiplyScalar(0.12) })
+      new THREE.SphereGeometry(m.size, 28, 28),
+      new THREE.MeshStandardMaterial({
+        map: maps.map, bumpMap: maps.bump, bumpScale: 0.8,
+        color: new THREE.Color(m.color), roughness: 0.92, metalness: 0.02,
+        emissive: new THREE.Color(m.color).multiplyScalar(0.10),
+      })
     );
     moonMesh.userData.moon = m;
     group.add(moonMesh);
@@ -1764,8 +2008,10 @@ function updateWorld(dt) {
     const z = Math.sin(pl.angle) * pl.orbitR;
     pl.group.position.set(x, pl.orbitY, z).applyAxisAngle(_orbitAxis.set(0, 0, 1), pl.inc);
     pl.group.getWorldPosition(pl.worldPos);
-    // gezeitengebundene Origin dreht sich nicht (eine Seite bleibt zum Zentrum); Eigenrotation läuft (sanft) weiter
+    // Gezeitenbindung (Origin): exakt EINE Eigenrotation pro Umlauf -> dieselbe
+    // Seite zeigt immer zum Zentrum (wie der Mond zur Erde). Andere rotieren frei.
     if (pl.data.type !== 'rocky') pl.body.rotation.y += dt * 0.05 * (0.3 + 0.7 * m);
+    else pl.body.rotation.y = -pl.angle;
     pl.mat.uniforms.uTime.value = elapsed;
 
     for (const mo of pl.moons) {
@@ -2213,6 +2459,8 @@ function applyFlyRotation() {
 const ARROW_MAP = { arrowup: 'pitchup', arrowdown: 'pitchdown', arrowleft: 'a', arrowright: 'd' };
 function onKeyDown(e) {
   if (!overlay.classList.contains('is-open')) return;
+  // Auf einer Planetenoberfläche (oder im Landeanflug) gehört die Tastatur surface.js
+  if (isSurfaceActive() || landingBusy) return;
   // Jede Taste (auch Escape) überspringt zuerst das Intro — Escape soll nicht
   // versehentlich das ganze Universum beenden, während man nur das Intro skippen will.
   if (introActive) { skipIntro(); return; }
@@ -2222,6 +2470,10 @@ function onKeyDown(e) {
   const k = ARROW_MAP[e.key.toLowerCase()] || e.key.toLowerCase();
   if (['w', 'a', 's', 'd', ' ', 'pitchup', 'pitchdown'].includes(k) || k === 'shift') {
     if (!focused && !focusedPlanet && !spaghetti) { fly.keys.add(k); dismissHelpSoon(); e.preventDefault(); } // WASD/Pfeile in beiden Modi
+  }
+  // L / E im stabilen Orbit: Landung auf dem fokussierten Planeten einleiten
+  if ((k === 'l' || k === 'e' || e.key === 'Enter') && focusedPlanet && orbitPhase === 'orbit' && !spaghetti) {
+    startLanding(); e.preventDefault(); return;
   }
   // E / Enter: eingerastetes Lock-On-Ziel aktivieren (Inside-Modus)
   if ((k === 'e' || e.key === 'Enter') && viewMode === 'inside' && !focused && !focusedPlanet && !spaghetti &&
@@ -2573,6 +2825,7 @@ function intersectCards() {
   return raycaster.intersectObjects(visibleCardMeshes, false);   // pro Frame gecachte Sichtbar-Liste
 }
 function onPointerMove(ev) {
+  if (isSurfaceActive() || landingBusy) return;
   if (isDown) dismissHelpSoon();
   if (isDown && viewMode === 'inside' && !focused && !spaghetti) {
     const dx = ev.clientX - lastX, dy = ev.clientY - lastY;
@@ -2586,6 +2839,7 @@ function onPointerMove(ev) {
   setPointer(ev);
 }
 function onPointerDown(ev) {
+  if (isSurfaceActive() || landingBusy) return;
   if (introActive) { skipIntro(); return; }
   isDown = true; dragging = false;
   fly.yawVel = 0; fly.pitchVel = 0;
@@ -2593,6 +2847,7 @@ function onPointerDown(ev) {
   lastInput = performance.now();
 }
 function onPointerUp(ev) {
+  if (isSurfaceActive() || landingBusy) return;
   isDown = false;
   const moved = Math.hypot(ev.clientX - downX, ev.clientY - downY);
   if (moved > 6 || dragging) return; // Drag (Umsehen) -> kein Klick
@@ -2820,10 +3075,14 @@ function updatePlanetFocus(dt) {
     .addScaledVector(_shipUp.set(0, 1, 0), pl.data.size * 0.4);
   camera.position.lerp(_camDesired, 1 - Math.exp(-2.4 * dt));
   camera.lookAt(pc);
+
+  // Lande-Angebot: erscheint erst im stabilen Orbit (nicht während des Anflugs)
+  showLandBtn(orbitPhase === 'orbit' && !landingBusy && shipLoaded && canLandHere());
 }
 
 function unfocusPlanet() {
   const was = focusedPlanet;
+  showLandBtn(false);
   focusedPlanet = null;
   orbitPhase = 'none';
   orbitCooldown = 3.0;                       // Sperre, damit der Auto-Orbit nicht sofort wieder greift
@@ -2841,6 +3100,128 @@ function unfocusPlanet() {
   } else {
     flyCameraTo(INSIDE_HOME, new THREE.Vector3(80, 2, 0), 1.5).then(() => { fly.yaw = camera.rotation.y; fly.pitch = camera.rotation.x; });
   }
+}
+
+/* ================================================================
+   PLANETEN-LANDUNG  (Orbit -> Atmosphärensturz -> Oberfläche)
+   Die Oberfläche selbst lebt in surface.js; hier passiert nur die
+   Weltraum-Seite: Lande-Trigger im Orbit, Sturzflug-Kinematik hinter
+   der Plasma-Blende und die Rückkehr in den Orbit nach dem Start.
+   ================================================================ */
+let landingBusy = false;
+let landBtnShown = false;
+const canLandHere = () => window.matchMedia('(pointer: fine)').matches;   // First-Person braucht Maus/Tastatur
+
+function showLandBtn(v) {
+  if (!landBtn || v === landBtnShown) return;
+  landBtnShown = v;
+  landBtn.classList.toggle('is-visible', v);
+  landBtn.setAttribute('aria-hidden', v ? 'false' : 'true');
+  if (v && focusedPlanet) landBtn.style.setProperty('--land-accent', focusedPlanet.data.accent || '#70d6ff');
+}
+
+async function startLanding() {
+  if (landingBusy || !focusedPlanet || orbitPhase !== 'orbit' || !shipLoaded || isSurfaceActive()) return;
+  landingBusy = true;
+  const pl = focusedPlanet;
+  hideDetail();
+  showLandBtn(false);
+  if (starmapOpen) toggleStarmap(false);
+  fly.keys.clear();
+  playSfx('activate');
+  showToast('<i class="fas fa-arrow-down"></i> Landeanflug · <span class="u-toast-strong">' + pl.data.name + '</span>', pl.data.accent);
+
+  // Sturzflug: GSAP steuert Schiff + Kamera direkt; camFlying pausiert
+  // updatePlanetFocus/updateFly (der Loop läuft weiter -> Trail, Lensing, Shake).
+  camFlying = true;
+  burnFX.start('entry');
+  const hasGSAP = window.gsap && !reduceMotion;
+  if (hasGSAP) {
+    const relStart = shipState.pos.clone().sub(pl.worldPos);   // planetenrelativ (Planet driftet minimal weiter)
+    const st = { t: 0 };
+    await new Promise((resolve) => {
+      gsap.to(st, {
+        t: 1, duration: 4.4, ease: 'power2.in',
+        onUpdate: () => {
+          const pc = pl.worldPos;
+          _orbTmp.copy(relStart).normalize().multiplyScalar(pl.data.size * 1.01);   // Zielpunkt knapp über der Oberfläche
+          _orbTmp2.copy(relStart).lerp(_orbTmp, st.t).add(pc);
+          shipState.pos.copy(_orbTmp2);
+          shipState.boost = true; shipState.engineGlow = 1;
+          // Nase dreht WEICH Richtung Planetenzentrum (kein harter Schnitt aus dem Orbit)
+          _shipFwd.copy(pc).sub(shipState.pos).normalize();
+          _lookTarget.copy(shipState.pos).add(_shipFwd);
+          _shipMat.lookAt(shipState.pos, _lookTarget, _shipUp.set(0, 1, 0));
+          _orbQuat.setFromRotationMatrix(_shipMat);
+          shipState.quat.slerp(_orbQuat, Math.min(1, 0.04 + st.t * 0.22));
+          if (shipPivot) { shipPivot.position.copy(shipState.pos); shipPivot.quaternion.copy(shipState.quat); }
+          const burn = THREE.MathUtils.smoothstep(st.t, 0.3, 0.92);
+          // Banking: erst in die Kurve legen, beim Eintritt zunehmendes Ruckeln
+          if (bankGroup) bankGroup.rotation.z = (1 - Math.min(1, st.t * 2)) * -0.45 + Math.sin(st.t * 34) * 0.1 * burn;
+          // Kamera schwenkt in einem BOGEN von seitlich-oben eng hinters Heck
+          const close = THREE.MathUtils.smoothstep(st.t, 0, 0.5);
+          const swing = (1 - close) * 1.15;                  // seitlicher Winkel klingt ab
+          _camDesired.set(Math.sin(swing) * 15, 7 - 4.2 * close, (22 - 11 * close) * Math.cos(swing * 0.4))
+            .applyQuaternion(shipState.quat).add(shipState.pos);
+          camera.position.copy(_camDesired);
+          camera.lookAt(_lookTarget.copy(shipState.pos).addScaledVector(_shipFwd, 30));
+          // Plasma, Zittern (inkl. Roll), FOV
+          burnFX.set(burn);
+          const amp = burn * 2.8;
+          camera.position.x += (Math.random() - 0.5) * amp;
+          camera.position.y += (Math.random() - 0.5) * amp;
+          camera.rotation.z += (Math.random() - 0.5) * 0.022 * burn;
+          camera.fov = 58 + burn * 26; camera.updateProjectionMatrix();
+          flyWarpSpeed = 400 * burn;
+        },
+        onComplete: resolve,
+      });
+    });
+  }
+  // Bildschirm ist jetzt voll abgedeckt -> Weltraum-Szene anhalten & Oberfläche aufbauen
+  burnFX.set(1);
+  stopLoop();
+  flyWarpSpeed = 0;
+  shipState.boost = false;
+  camera.fov = 58; camera.updateProjectionMatrix();
+  overlay.classList.add('is-surface');
+  await enterSurface(pl.data);
+  camFlying = false;
+  landingBusy = false;
+}
+
+/* Rückkehr von der Oberfläche: Schiff wieder in den Orbit des (ggf. per
+   Beam gewechselten) Planeten setzen und die Weltraum-Szene fortsetzen. */
+function onSurfaceDeparted(pd) {
+  overlay.classList.remove('is-surface');
+  landingBusy = false;
+  camFlying = false;
+  const pl = planets.find((p) => p.data.id === pd.id) || null;
+  if (pl) {
+    focusedPlanet = pl;
+    orbitPhase = 'orbit';
+    lastOrbitPlanet = null;
+    orbitCooldown = 0;
+    orbitAngle = Math.random() * Math.PI * 2;
+    const R = pl.data.size * ORBIT_RADIUS_K;
+    _orbTmp.set(Math.cos(orbitAngle) * R, R * 0.16, Math.sin(orbitAngle) * R).add(pl.worldPos);
+    shipState.pos.copy(_orbTmp);
+    shipState.vel.set(0, 0, 0);
+    _orbTmp2.set(-Math.sin(orbitAngle), 0, Math.cos(orbitAngle));
+    _lookTarget.copy(shipState.pos).add(_orbTmp2);
+    _shipMat.lookAt(shipState.pos, _lookTarget, _shipUp.set(0, 1, 0));
+    shipState.quat.setFromRotationMatrix(_shipMat);
+    if (shipPivot) { shipPivot.position.copy(shipState.pos); shipPivot.quaternion.copy(shipState.quat); }
+    // Kamera hinter dem Schiff, Blick auf den Planeten (updatePlanetFocus übernimmt weich)
+    _orbTmp.copy(shipState.pos).sub(pl.worldPos).normalize();
+    camera.position.copy(shipState.pos)
+      .addScaledVector(_orbTmp, pl.data.size * 1.2)
+      .addScaledVector(_shipUp.set(0, 1, 0), pl.data.size * 0.4);
+    camera.lookAt(pl.worldPos);
+  }
+  startLoop();
+  burnFX.fadeOut(1.1);
+  showToast('<i class="fas fa-circle-up"></i> Zurück im Orbit · <span class="u-toast-strong">' + pd.name + '</span>', pd.accent);
 }
 
 /* ---- Tech-Brocken: zeigt zugehörige Projekte ---- */
@@ -3330,7 +3711,8 @@ function animate() {
   }
 
   // sanftes FOV: Hineinzoomen beim Fokus, Aufweiten beim Boost (Speed-Gefühl)
-  if (!spaghetti) {
+  // (während des Landeanflugs steuert startLanding das FOV selbst)
+  if (!spaghetti && !landingBusy) {
     const boosting = shipState.boost && viewMode === 'inside' && !focused && !focusedPlanet;
     let tf = focused ? 50 : (boosting ? 74 : 58);
     if (focusedPlanet) tf = (orbitPhase === 'transit') ? 72 : 56;   // Anflug: weit (Speed) · Orbit: intim
@@ -3367,6 +3749,22 @@ async function initSceneOnce() {
   buildScene();
   await buildCards();
   loadShip();            // asynchron: Szene läuft, Schiff blendet ein sobald geladen
+  // Oberflächen-Modul verdrahten (nutzt denselben Renderer; eigener Loop)
+  initSurface({
+    renderer,
+    worlds: WORLD.planets,
+    getShipTemplate: () => shipOrient,
+    playSfx,
+    showToast,
+    matchProjects: (pd) => matchProjectsForPlanet(pd),
+    getAudioCtx: () => audioCtx,
+    isMusicMuted: () => musicMuted,
+    reduceMotion,
+    onDeparted: onSurfaceDeparted,
+    onBeamed: (pd) => {
+      if (!discovered.has(pd.id)) { discovered.add(pd.id); updateHudCounter(); }
+    },
+  });
   sceneBuilt = true;
 }
 function openOverlay() {
@@ -3784,6 +4182,14 @@ function cancelIntro() {
 async function smoothExit(scrollTarget) {
   const hasGSAP = window.gsap && !reduceMotion;
 
+  // Falls der Nutzer noch auf einer Planetenoberfläche steht: hart aufräumen
+  if (isSurfaceActive()) {
+    forceExitSurface();
+    overlay.classList.remove('is-surface');
+    landingBusy = false;
+    startLoop();
+  }
+  showLandBtn(false);
   cancelIntro();
   fadeMusicOut();
   if (starmapOpen) toggleStarmap(false);
@@ -4113,6 +4519,7 @@ function wire() {
   starmapBtn && starmapBtn.addEventListener('click', () => toggleStarmap());
   starmapCloseBtn && starmapCloseBtn.addEventListener('click', () => toggleStarmap(false));
   starmapCanvas && starmapCanvas.addEventListener('click', onStarmapClick);
+  landBtn && landBtn.addEventListener('click', startLanding);
 
   // Welt-Navigation im Detail-Panel: "Nächste Welt" springt per Autopilot weiter,
   // die Galerie-CTA (Nexus) führt direkt durchs Wurmloch — geführte Tour ohne Flugkünste.
