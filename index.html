@@ -6,7 +6,7 @@
     <title>Lorenzo Bay-Müller - My personal site. Universe. Physics. Code. Science.</title>
     <meta name="description" content="Portfolio of Lorenzo Bay-Müller, a digital explorer, inventor,  scientist who connects code, physics, and the universe. Discover projects and explorations.">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="universe.css?v=9">
+    <link rel="stylesheet" href="universe.css?v=11">
     <meta name="keywords" content="Lorenzo Bay-Müller, Portfolio, Webdevelopment, Python, JavaScript, Physics, Astrophysics, 3D-Printing, Drone, Science, Code, Universe">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,10 +32,6 @@
 </script>
 
 <body>
-    <!-- Kosmischer Custom-Cursor (Dot + Trail) -->
-    <div class="cursor-dot"></div>
-    <div class="cursor-trail"></div>
-
     <!-- Partikel Hintergrund Container (repräsentiert Sterne/Kosmos) -->
     <div id="particles-js"></div>
 
@@ -198,6 +194,28 @@
             <span><i class="fas fa-circle-notch" aria-hidden="true"></i> Wurmloch &rarr; Projekt-Galerie &middot; <i class="fas fa-triangle-exclamation" aria-hidden="true"></i> Gravitation am Schwarzen Loch</span>
         </div>
 
+        <!-- ===== Cineastische Intro-Sequenz ===== -->
+
+        <!-- Phase 2: Willkommens-Schriftzug -->
+        <div class="u-welcome" id="u-welcome" aria-hidden="true">
+            <span class="u-welcome-pre">Willkommen im</span>
+            <span class="u-welcome-title">Nexus&#8209;System</span>
+            <span class="u-welcome-line" aria-hidden="true"></span>
+            <span class="u-welcome-sub">Ein Portfolio-Universum von Lorenzo Bay-M&uuml;ller</span>
+        </div>
+
+        <!-- Phase 3: Fly-by-Textkarte pro Welt -->
+        <div class="u-flyby" id="u-flyby" aria-hidden="true"></div>
+
+        <!-- Phase 5: System-Boot-Diagnose -->
+        <div class="u-boot" id="u-boot" aria-hidden="true"></div>
+
+        <!-- Phase 6: Startfreigabe -->
+        <div class="u-launch" id="u-launch" aria-hidden="true">
+            <span class="u-launch-ring" aria-hidden="true"></span>
+            <span class="u-launch-text"><kbd>W</kbd> Triebwerke z&uuml;nden</span>
+        </div>
+
         <!-- Detailpanel beim Fokussieren einer Karte -->
         <aside class="u-detail" id="u-detail" aria-hidden="true">
             <button type="button" class="u-detail-close" id="u-detail-close" aria-label="Close details">&times;</button>
@@ -286,7 +304,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
 
     <!-- Three.js (ES-Module via Importmap) + Universe-Logik -->
     <script type="importmap">
@@ -297,7 +315,7 @@
       }
     }
     </script>
-    <script type="module" src="universe.js?v=19"></script>
+    <script type="module" src="universe.js?v=23"></script>
 
     <!-- Fallback: falls das 3D-Modul (CDN) nicht lädt, bleiben die Buttons nutzbar -->
     <script>

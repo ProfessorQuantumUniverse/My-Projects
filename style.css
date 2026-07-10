@@ -112,47 +112,6 @@ body {
     overflow: hidden;
 }
 
-.cursor-dot,
-.cursor-trail {
-    position: fixed; /* Immer im Viewport */
-    top: 0;
-    left: 0;
-    border-radius: 50%;
-    pointer-events: none; /* WICHTIG: Verhindert, dass sie Klicks blockieren */
-    z-index: 9999; /* Immer ganz oben */
-    opacity: 0; /* Start unsichtbar */
-    transition: opacity 0.3s ease, transform 0.2s ease; /* Für Enter/Leave */
-    will-change: transform; /* Performance */
-}
-
-.cursor-dot {
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-accent-cyan, #76e3ea);
-    transform: translate(-50%, -50%) scale(0); /* Zentriert und Start klein */
-}
-
-.cursor-trail {
-    width: 30px;
-    height: 30px;
-    background-color: rgba(125, 249, 255, 0.2); /* Transparenter Cyan */
-    /* border: 1px solid rgba(125, 249, 255, 0.3); */ /* Optionaler Rand */
-    transform: translate(-50%, -50%) scale(0); /* Zentriert und Start klein */
-    /* Der Trail wird per JS verzögert */
-}
-
-
-/* Optional: Cursor ändern, wenn über Links/Buttons */
-a:hover ~ .cursor-dot,
-button:hover ~ .cursor-dot {
-     transform: translate(-50%, -50%) scale(1.5); /* Größerer Punkt */
-}
-a:hover ~ .cursor-trail,
-button:hover ~ .cursor-trail {
-    transform: translate(-50%, -50%) scale(1.2);
-    background-color: rgba(125, 249, 255, 0.3); /* Etwas stärker */
-}
-
 .cta-button {
     display: inline-flex; /* Für Icon Ausrichtung */
     align-items: center;

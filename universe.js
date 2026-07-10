@@ -18,6 +18,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { initSurface, enterSurface, isSurfaceActive, burnFX, forceExitSurface } from './surface.js?v=9';
 
@@ -96,6 +97,10 @@ const starmapCanvas  = document.getElementById('u-starmap-canvas');
 const starmapCtx     = starmapCanvas ? starmapCanvas.getContext('2d') : null;
 const starmapInfo    = document.getElementById('u-starmap-info');
 const landBtn        = document.getElementById('u-land');
+const welcomeEl      = document.getElementById('u-welcome');
+const flybyEl        = document.getElementById('u-flyby');
+const bootEl         = document.getElementById('u-boot');
+const launchEl       = document.getElementById('u-launch');
 
 /* ----------------------------------------------------------------
    Hilfsfunktionen
@@ -388,8 +393,18 @@ const _lensHoleUv = { x: 0, y: 0, z: 0 };
 const _lensEdgeUv = { x: 0, y: 0, z: 0 };
 
 let horizon, disk, diskOccluder, photonRing, glowRim, starfield, starsBright, nebula;
+let diskLight = null;            // dynamisches Licht der Akkretionsscheibe (flackert warm)
+let diskPulse = 1;               // aktueller Flacker-Wert (auch für Planeten-Shader)
 let starLayers = [];             // 3 Sternenschichten (nah/mittel/fern) für Parallaxe
-let lensPass, bloomPass, spriteTex, starMat;
+let lensPass, bloomPass, fxaaPass, spriteTex, starMat;
+// FXAA arbeitet in physischen Pixeln -> Auflösungs-Uniform bei Init & Resize setzen
+function setFxaaResolution() {
+  if (!fxaaPass || !renderer) return;
+  const pr = renderer.getPixelRatio();
+  fxaaPass.material.uniforms['resolution'].value.set(
+    1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr)
+  );
+}
 let stardust = null;             // mitfliegender Vordergrund-Sternenstaub
 let cardGlow = null;             // einzelner Glow-Halo, folgt der aktiven Karte
 let novaSystem = null;           // aktive Supernova-Partikel
@@ -466,6 +481,11 @@ let spaghetti = false;
 let introActive = false;        // cinematischer Anflug nach dem Warp
 let introTween = null;
 let introFinish = null;
+let lastCamTween = null;        // Handle der letzten flyCameraTo-Fahrt (für Intro-Skip)
+let introSkipped = false;       // Skip gedrückt -> restliche Phasen im Schnelldurchlauf
+let introToken = 0;             // entwertet verwaiste Intro-Ketten nach cancelIntro/Re-Entry
+let launchPending = false;      // Phase 6: wartet auf [W] "Triebwerke zünden"
+let introWaitResolvers = [];    // laufende Intro-Pausen (bei Skip sofort auflösen)
 let cardsRevealed = false;       // Karten erscheinen erst nach der Supernova
 let camFlying = false;           // sanfte Kamerafahrt (Fokus/Modus/Settle) aktiv
 
@@ -901,9 +921,11 @@ function updateNewsComets(dt) {
     // Label an Kopf-Position projizieren
     _newsVec.copy(c.headPos).project(camera);
     const behind = _newsVec.z > 1;
-    if (canShow && !behind && Math.abs(_newsVec.x) < 1.1 && Math.abs(_newsVec.y) < 1.1) {
+    const ny = (-_newsVec.y * 0.5 + 0.5) * h;
+    // y-Klemmen: Schlagzeilen nicht über das HUD (oben) oder die Hilfe (unten) legen
+    if (canShow && !behind && Math.abs(_newsVec.x) < 1.1 && ny > 150 && ny < h - 120) {
       const x = (_newsVec.x * 0.5 + 0.5) * w;
-      const y = (-_newsVec.y * 0.5 + 0.5) * h;
+      const y = ny;
       c.el.style.transform = `translate(-50%, -140%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
       c.el.style.opacity = (fade * 0.95).toFixed(2);
       c.el.style.pointerEvents = fade > 0.5 ? 'auto' : 'none';
@@ -923,10 +945,10 @@ function updateNewsComets(dt) {
 function buildNebula() {
   nebula = new THREE.Group();
   const tex = makeNebulaTexture();
-  const colors = ['#3a2d8f', '#2f5fae', '#7a4bd0', '#1f4f8f', '#5a3fb0'];
-  const COUNT = 5;   // wenige, große, weit entfernte Schwaden -> Tiefe ohne Unruhe
+  const colors = ['#3a2d8f', '#2f5fae', '#7a4bd0', '#1f4f8f', '#5a3fb0', '#8a3f7a', '#2a6a9a'];
+  const COUNT = 8;   // große, weit entfernte Schwaden -> spürbare Tiefe statt leerem Schwarz
   for (let i = 0; i < COUNT; i++) {
-    const baseOpacity = 0.05 + Math.random() * 0.06;
+    const baseOpacity = 0.07 + Math.random() * 0.08;
     const mat = new THREE.MeshBasicMaterial({
       map: tex, color: new THREE.Color(colors[i % colors.length]), transparent: true,
       opacity: baseOpacity, blending: THREE.AdditiveBlending,
@@ -959,7 +981,7 @@ function diskColor(t) {
 function buildDisk() {
   // Akkurate Akkretionsscheibe als EINE Shader-Fläche (kein Partikel-Stacking
   // -> kein Ausbrennen). Temperaturgradient, Doppler-Beaming, FBM-Turbulenz.
-  const geo = new THREE.RingGeometry(DISK_INNER, DISK_OUTER, 128, 8);
+  const geo = new THREE.RingGeometry(DISK_INNER, DISK_OUTER, 192, 8);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     uniforms: { uTime: { value: 0 }, uInner: { value: DISK_INNER }, uOuter: { value: DISK_OUTER } },
@@ -994,14 +1016,14 @@ function buildDisk() {
         // Relativistisches Beaming: die auf uns zu rotierende Seite ist deutlich
         // heller UND blauverschoben, die wegrotierende dunkler und rotverschoben.
         float cosb = cos(ang - 1.5708);
-        float beam = pow(0.5 + 0.5*cosb, 1.6) * 1.9 + 0.18;
+        float beam = pow(0.5 + 0.5*cosb, 1.6) * 2.2 + 0.28;
         col = mix(col * vec3(1.10, 0.86, 0.68), col * vec3(0.88, 0.96, 1.30), clamp(cosb*0.5 + 0.5, 0.0, 1.0));
         // gleißender Innensaum + weiche Kanten; außen ätherisch ausdünnen
         float edge = smoothstep(0.0, 0.03, t) * (1.0 - smoothstep(0.68, 1.0, t));
-        float innerHot = pow(1.0 - t, 1.6) * 2.1 + 0.6;
-        float rimFlash = (1.0 - smoothstep(0.0, 0.06, t)) * 1.5;
+        float innerHot = pow(1.0 - t, 1.6) * 2.9 + 0.85;
+        float rimFlash = (1.0 - smoothstep(0.0, 0.06, t)) * 2.3;
         float bright = (innerHot + rimFlash) * beam * dust * edge;
-        float alpha = edge * (0.5 + 0.5*dust) * (0.55 + 0.45*(1.0-t));
+        float alpha = edge * (0.5 + 0.5*dust) * (0.60 + 0.40*(1.0-t));
         gl_FragColor = vec4(col * bright, alpha);
       }`,
   });
@@ -1013,7 +1035,7 @@ function buildDisk() {
 /* ---- Schwarzes Loch: tiefschwarzer Kern + dezenter Rand/Photon-Ring ---- */
 function buildBlackHole() {
   horizon = new THREE.Mesh(
-    new THREE.SphereGeometry(BH_RADIUS, 40, 40),
+    new THREE.SphereGeometry(BH_RADIUS, 64, 64),
     new THREE.MeshBasicMaterial({ color: 0x000000 })
   );
   horizon.name = 'blackhole';
@@ -1023,7 +1045,7 @@ function buildBlackHole() {
   // dezenter Fresnel-Rand (Lichtsaum)
   const rimMat = new THREE.ShaderMaterial({
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide,
-    uniforms: { uColor: { value: new THREE.Color('#5e86c8') }, uIntensity: { value: 0.5 } },
+    uniforms: { uColor: { value: new THREE.Color('#6e96d8') }, uIntensity: { value: 0.7 } },
     vertexShader: `
       varying vec3 vN; varying vec3 vV;
       void main(){
@@ -1039,7 +1061,7 @@ function buildBlackHole() {
         gl_FragColor = vec4(uColor * rim * uIntensity, rim);
       }`,
   });
-  glowRim = new THREE.Mesh(new THREE.SphereGeometry(BH_RADIUS * 1.04, 40, 40), rimMat);
+  glowRim = new THREE.Mesh(new THREE.SphereGeometry(BH_RADIUS * 1.04, 64, 64), rimMat);
   scene.add(glowRim);
 
   // schmaler Photon-/Einstein-Ring (zur Kamera ausgerichtet)
@@ -1075,6 +1097,7 @@ const WORLD = {
       type: 'rocky', orbitR: 1800, orbitY: 0, size: 100, speed: 0.034, inc: 0, tilt: 0.3,
       colA: '#3a2418', colB: '#b5703a', colC: '#ffd9a0', glow: '#ffb060', glowAmt: 0.0,
       icon: 'fa-user-astronaut', accent: '#ffa94d',
+      tagline: 'Über mich & Herkunft',
       title: 'Origin — Wer steckt dahinter?',
       lead: 'Die innerste Welt, eine Seite ewig dem Licht zugewandt.',
       story: 'Alles beginnt hier: Neugier auf den Nachthimmel, erste Zeilen Code, der Drang, Dinge auseinanderzunehmen und besser wieder zusammenzusetzen. Diese Welt bleibt dem Licht zugewandt — wie ihr Bewohner den offenen Fragen.',
@@ -1094,6 +1117,7 @@ const WORLD = {
       type: 'lava', orbitR: 3500, orbitY: 0, size: 160, speed: 0.0125, inc: 0, tilt: 0.5,
       colA: '#1c0a06', colB: '#5a1505', colC: '#ff5a1e', glow: '#ff8a2a', glowAmt: 0.0,
       icon: 'fa-hammer', accent: '#ff6b6b',
+      tagline: 'Hardware & Maker-Projekte',
       title: 'Forge — Was entsteht mit den Händen?',
       lead: 'Glühende Risse, sprühende Funken — die Maker-Welt.',
       story: 'Wo Ideen physisch werden: 3D-Drucker surren, Kameras klicken, Server blinken. Auf Forge entsteht Hardware zum Anfassen — von der Fotobox bis zur AstroCam.',
@@ -1120,6 +1144,7 @@ const WORLD = {
       colA: '#2a1a5e', colB: '#7a4bd0', colC: '#c9a8ff', glow: '#a67cff', glowAmt: 0.0,
       ring: { inner: 180, outer: 360, color: '#b79cff', tilt: 0.42 },
       icon: 'fa-atom', accent: '#a67cff',
+      tagline: 'Physik, Wissen & Daten',
       title: 'Aether — Was bewegt den Geist?',
       lead: 'Wirbelnde Wolkenbänder voller Formeln und Fragen.',
       story: 'Der Denkraum: Physik, Astronomie, Datenanalyse. Hier kreisen Formeln wie Monde — und jedes Projekt ist ein Experiment mit offenem Ausgang.',
@@ -1145,6 +1170,7 @@ const WORLD = {
       colA: '#0a2540', colB: '#2f7fb5', colC: '#d8f4ff', glow: '#70ffd0', glowAmt: 0.0,
       aurora: 1.0,
       icon: 'fa-satellite-dish', accent: '#70d6ff',
+      tagline: 'Kontakt & Kanäle',
       title: 'Nexus — Wie erreicht man dich?',
       lead: 'Kalt, klar, von Nordlichtern umspielt. Der Außenposten.',
       story: 'Der Außenposten mit Antenne ins Netz. Drei Monde, drei Kanäle — und jedes Signal wird beantwortet. Von hier führt das Wurmloch weiter zur Projekt-Galerie.',
@@ -1232,6 +1258,7 @@ function makePlanetMaterial(p) {
       uGlow:      { value: p.type === 'rocky' ? 1.0 : 0.0 },
       uGlowColor: { value: new THREE.Color(p.glow || '#ffffff') },
       uSeed:      { value: Math.random() * 10 },
+      uDiskPulse: { value: 1.0 },
       uSunDir:    { value: new THREE.Vector3(0.4, 0.5, 1).normalize() },
       uAtmo:      { value: new THREE.Color(p.accent || '#88aaff') },
       // Relief-Amplitude in WELTEINHEITEN (skaliert mit Planetenradius); Gas = 0
@@ -1248,7 +1275,7 @@ function makePlanetMaterial(p) {
       }`,
     fragmentShader: `
       varying vec3 vObj; varying vec3 vWNormal; varying vec3 vWPos;
-      uniform float uTime, uBands, uLava, uAurora, uIce, uCity, uStorm, uGlow, uSeed, uBump;
+      uniform float uTime, uBands, uLava, uAurora, uIce, uCity, uStorm, uGlow, uSeed, uBump, uDiskPulse;
       uniform vec3 uColA, uColB, uColC, uGlowColor, uSunDir, uAtmo;
       ${GLSL_NOISE}
       float fbm3(vec3 q){ float a=0.5,s=0.0; for(int i=0;i<3;i++){ s+=a*vnoise(q); q*=2.03; a*=0.5; } return s; }
@@ -1342,7 +1369,9 @@ function makePlanetMaterial(p) {
         float diffC = clamp(dot(N, normalize(-vWPos)), 0.0, 1.0);
         float diffS = clamp(dot(N, S), 0.0, 1.0);
         float wrapS = clamp((dot(N, S) + 0.22) / 1.22, 0.0, 1.0);
-        col *= 0.32 + 0.40*diffC + 0.85*wrapS;
+        // uDiskPulse: lebendiges Flackern der Akkretionsscheibe auf der zugewandten Seite
+        col *= 0.32 + (0.30 + 0.24*uDiskPulse)*diffC + 0.85*wrapS;
+        col += vec3(1.0, 0.62, 0.32) * diffC * uDiskPulse * 0.10;
 
         // Terminator: warmer Streulicht-Saum am Tag/Nacht-Übergang
         float term = smoothstep(0.0, 0.14, diffS) * (1.0 - smoothstep(0.14, 0.40, diffS));
@@ -1415,7 +1444,9 @@ function makeAtmosphere(color, radius) {
       }`,
   });
   mat.toneMapped = false;
-  return new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 32), mat);
+  // 56 Segmente: die halbtransparente Hülle zeigt ihre Silhouette direkt am Rand —
+  // bei 32 Segmenten war der Polygonzug im Atmosphärensaum deutlich sichtbar
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 56, 56), mat);
 }
 
 /* ---- Ring-Textur (Aether): feine Strata + Cassini-artige Lücken ---- */
@@ -1449,24 +1480,54 @@ function makeRingTexture() {
   return tex;
 }
 
-/* ---- Orbit-Linie: zeigt die Systemebene, genau auf der Planetenbahn ---- */
+/* ---- Orbit-Linie: leuchtendes Neon-Band statt 1px-Linie ----
+   LineBasicMaterial ist auf Windows/ANGLE immer 1px dünn und säuft im Hintergrund
+   ab. Stattdessen: flaches Ring-Band, dessen Shader die Linienbreite in
+   BILDSCHIRM-Pixeln zeichnet (fwidth): ~1.5px-Kern + ~8px-Halo, egal wie weit
+   die Bahn entfernt ist. Das macht die Linie überall gleich fein & durchgehend —
+   keine Subpixel-Stückelung mehr in der Ferne, kein fettes Band aus der Nähe. */
+const ORBIT_OPACITY = 0.85;
 function buildOrbitLine(p) {
-  const SEG = 96;
-  const pts = [];
-  const axis = new THREE.Vector3(0, 0, 1);
-  for (let i = 0; i <= SEG; i++) {
-    const a = (i / SEG) * Math.PI * 2;
-    const v = new THREE.Vector3(Math.cos(a) * p.orbitR, p.orbitY, Math.sin(a) * p.orbitR);
-    v.applyAxisAngle(axis, p.inc);            // exakt wie die Planetenposition geneigt
-    pts.push(v);
-  }
-  const geo = new THREE.BufferGeometry().setFromPoints(pts);
-  const mat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(p.accent), transparent: true, opacity: 0.55,
-    blending: THREE.AdditiveBlending, depthWrite: false,
+  // großzügige Bandbreite: muss auch aus großer Distanz (>20 Welteinheiten/Pixel)
+  // noch genug Pixel für Kern+Halo hergeben; der Shader füllt nur wenige px davon
+  const W = 150;
+  const geo = new THREE.RingGeometry(p.orbitR - W, p.orbitR + W, 256, 1);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: {
+      uColor:   { value: new THREE.Color(p.accent) },
+      uR:       { value: p.orbitR },
+      uW:       { value: W },
+      uOpacity: { value: ORBIT_OPACITY },
+    },
+    vertexShader: `
+      varying vec2 vP;
+      void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      varying vec2 vP; uniform vec3 uColor; uniform float uR, uW, uOpacity;
+      void main(){
+        float L = length(vP);
+        float d = abs(L - uR);                       // Weltabstand zur Bahnmitte
+        float px = max(fwidth(L), 1e-4);             // Welteinheiten pro Bildschirm-Pixel
+        float dpx = d / px;                          // Abstand in Pixeln -> auflösungsunabhängig
+        float core = exp(-dpx * dpx * 0.45);         // ~1.5px heller Neon-Faden
+        float glow = exp(-dpx * dpx * 0.014) * 0.30; // ~8px weicher Halo
+        float edge = 1.0 - smoothstep(uW * 0.62, uW, d);   // weich zum Geometrierand (kein Abschneiden)
+        vec3 col = mix(uColor, vec3(1.0), core * 0.5) * (core * 1.5 + glow);
+        gl_FragColor = vec4(col, (core + glow) * edge * uOpacity);
+      }`,
   });
   mat.toneMapped = false;
-  const line = new THREE.LineLoop(geo, mat);
+  const line = new THREE.Mesh(geo, mat);
+  // RingGeometry liegt in XY -> in die XZ-Ebene kippen, DANN um Welt-Z neigen
+  // (wie die Planetenposition: applyAxisAngle um (0,0,1)). Achtung Euler-Reihenfolge:
+  // beim Default 'XYZ' träfe Rz die noch flache Ring-Ebene zuerst (für einen Kreis
+  // wirkungslos) -> die Neigung verpuffte und Nexus' Linie lag falsch in der Ekliptik.
+  // 'ZYX' wendet Rx zuerst auf die Vertices an, Rz danach = echte Bahnneigung.
+  line.rotation.order = 'ZYX';
+  line.rotation.x = -Math.PI / 2;
+  line.rotation.z = p.inc;
+  line.position.y = p.orbitY;
   scene.add(line);
   return line;
 }
@@ -1576,7 +1637,7 @@ function buildPlanet(p, idx) {
   group.add(body);
 
   const mat = makePlanetMaterial(p);
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 40, 40), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 72, 72), mat);
   mesh.userData.planet = p;                    // für Raycast-Picking
   body.add(mesh);
 
@@ -1587,7 +1648,7 @@ function buildPlanet(p, idx) {
 
   // optionaler Ring (Aether)
   if (p.ring) {
-    const rg = new THREE.RingGeometry(p.ring.inner, p.ring.outer, 64);
+    const rg = new THREE.RingGeometry(p.ring.inner, p.ring.outer, 128);
     // UV so anpassen, dass die Textur radial verläuft
     const ringMat = new THREE.MeshBasicMaterial({
       map: makeRingTexture(), color: new THREE.Color(p.ring.color), transparent: true,
@@ -1613,7 +1674,7 @@ function buildPlanet(p, idx) {
   (p.moons || []).forEach((m) => {
     const maps = makeMoonMaps();
     const moonMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(m.size, 28, 28),
+      new THREE.SphereGeometry(m.size, 36, 36),
       new THREE.MeshStandardMaterial({
         map: maps.map, bumpMap: maps.bump, bumpScale: 0.8,
         color: new THREE.Color(m.color), roughness: 0.92, metalness: 0.02,
@@ -1671,7 +1732,7 @@ function buildAsteroidBelt(sprite) {
     const a = (i / WORLD.tech.length) * Math.PI * 2 + Math.random() * 0.2;
     const r = (BELT_R0 + BELT_R1) / 2 + (Math.random() - 0.5) * 40;
     const rock = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(t.size * 4.4, 0),
+      new THREE.IcosahedronGeometry(t.size * 4.4, 1),   // Detail 1: kantiger Fels, aber nicht "2005-Low-Poly"
       new THREE.MeshStandardMaterial({ color: new THREE.Color(t.color), roughness: 0.7, metalness: 0.25, emissive: new THREE.Color(t.color).multiplyScalar(0.18), flatShading: true })
     );
     rock.userData.tech = t;
@@ -1769,7 +1830,7 @@ function buildPortalGroup(ringR, tint) {
   g.add(glow);
 
   const vortexMat = makeVortexMaterial(tint);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(ringR * 0.97, 72), vortexMat);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(ringR * 0.97, 96), vortexMat);
   g.add(disc);
 
   // spiralende Partikel im Schlund
@@ -1917,6 +1978,7 @@ function applyMainState() {
 }
 function enterCardRealm() {
   if (realm === 'cards' || busy || introActive) return;
+  if (launchPending) dismissLaunch();
   realm = 'cards';
   if (focused) { focused = null; hideDetail(); }
   if (focusedPlanet) { focusedPlanet = null; hideDetail(); }
@@ -1939,11 +2001,12 @@ function exitCardRealm() {
 }
 
 function buildWorld(sprite) {
-  // Zentrales Punktlicht (warmer Akzent vom Schwarzen Loch) – ohne Abfall, damit
-  // es auch die weit entfernten Planeten erreicht
-  const key = new THREE.PointLight(0xffe6c0, 1.4, 0, 0);
-  key.position.set(0, 0, 0);
-  scene.add(key);
+  // Zentrales Punktlicht = Glut der Akkretionsscheibe (warm, ohne Abfall, damit es
+  // auch die fernen Planeten erreicht). Flackert in animate() leicht -> die Scheibe
+  // wirft spürbar dynamisches Licht auf Monde, Tech-Brocken und das Raumschiff.
+  diskLight = new THREE.PointLight(0xffc890, 1.5, 0, 0);
+  diskLight.position.set(0, 0, 0);
+  scene.add(diskLight);
   // Ferner "Sonnenstern": gerichtetes Licht, das ALLE Planeten gleichmäßig formt
   const sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
   sun.position.set(0.4, 0.5, 1).normalize();
@@ -1958,6 +2021,9 @@ function buildWorld(sprite) {
   sunHalo.scale.set(3200, 3200, 1);
   // deutlich helleres Umgebungslicht -> nichts versinkt im Schwarz
   scene.add(new THREE.AmbientLight(0x4a5a78, 1.1));
+  // kühles Hemisphären-Licht: weicher Himmel-/Boden-Verlauf auf Monden, Brocken &
+  // Schiff — nimmt harten Kontrast aus dem Schattenbereich (mehr Tiefe, kein Schwarz)
+  scene.add(new THREE.HemisphereLight(0x5a6aa0, 0x241a3a, 0.55));
 
   WORLD.planets.forEach(buildPlanet);
   buildEclipticField(sprite);
@@ -2013,6 +2079,7 @@ function updateWorld(dt) {
     if (pl.data.type !== 'rocky') pl.body.rotation.y += dt * 0.05 * (0.3 + 0.7 * m);
     else pl.body.rotation.y = -pl.angle;
     pl.mat.uniforms.uTime.value = elapsed;
+    pl.mat.uniforms.uDiskPulse.value = diskPulse;
 
     for (const mo of pl.moons) {
       mo.angle += dt * mo.speed * m;
@@ -2425,12 +2492,23 @@ function buildScene() {
   // Auflösungsunterschied vollständig, spart aber ~4x Fragment-Last im Bloom-Pass.
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)),
-    0.42, 0.55, 0.5 // strength, radius, threshold -> dezenteres Glühen, Planeten brennen nicht aus
+    0.55, 0.65, 0.5 // strength, radius, threshold -> sattes Glühen, Planeten brennen nicht aus
   );
   composer.addPass(bloomPass);
-  // Gravitations-Lensing als letzter Pass
+  // Gravitations-Lensing
   lensPass = new ShaderPass(LensShader);
   composer.addPass(lensPass);
+  // Kantenglättung als LETZTER Pass: FXAA statt MSAA-Rendertarget. Das Canvas-antialias
+  // greift mit Composer nicht, und ein 4x-MSAA-HalfFloat-Target verursachte auf
+  // Windows/ANGLE schwarzes Flackern + massiv GPU-Last. FXAA ist stabil und billig.
+  // Bias -100 -> -16: D3D klemmt ohnehin auf -16 und spammt sonst pro Compile eine
+  // X4713-Warnung in die Konsole (Rendertargets haben keine Mips, Wert ist egal).
+  fxaaPass = new ShaderPass({
+    ...FXAAShader,
+    fragmentShader: FXAAShader.fragmentShader.replaceAll('-100.0', '-16.0'),
+  });
+  composer.addPass(fxaaPass);
+  setFxaaResolution();
 
   // Dome-Free-Look initial ausrichten
   fly.yaw = 0; fly.pitch = 0.12;
@@ -2469,6 +2547,7 @@ function onKeyDown(e) {
   lastInput = performance.now();
   const k = ARROW_MAP[e.key.toLowerCase()] || e.key.toLowerCase();
   if (['w', 'a', 's', 'd', ' ', 'pitchup', 'pitchdown'].includes(k) || k === 'shift') {
+    if (launchPending) dismissLaunch();               // Phase 6: erste Schub-Eingabe = "Triebwerke zünden"
     if (!focused && !focusedPlanet && !spaghetti) { fly.keys.add(k); dismissHelpSoon(); e.preventDefault(); } // WASD/Pfeile in beiden Modi
   }
   // L / E im stabilen Orbit: Landung auf dem fokussierten Planeten einleiten
@@ -2918,7 +2997,9 @@ function flyCameraTo(targetPos, lookAtVec, duration = 1.2, ease = 'power3.inOut'
     const warpPeak = warp ? Math.min(260, 60 + travel * 0.4) : 0;   // weiter = stärkerer Warp
     const s = { t: 0 };
     camFlying = true;
-    gsap.to(s, {
+    // Tween-Handle merken: das Intro kann laufende Kamerafahrten damit
+    // fast-forwarden (Skip -> progress(1) feuert onComplete -> Promise löst auf)
+    lastCamTween = gsap.to(s, {
       t: 1, duration, ease,
       onUpdate: () => {
         camera.position.lerpVectors(startPos, targetPos, s.t);
@@ -2963,6 +3044,7 @@ function unfocusCard() {
 /* ---- Planet anfliegen: Autopilot fliegt das Schiff hin & klinkt sich in einen Orbit ein ---- */
 function focusPlanet(pl) {
   if (focused) unfocusCard();
+  if (launchPending) dismissLaunch();
   focusedPlanet = pl;
   controls.enabled = false;
   fly.keys.clear();
@@ -3537,6 +3619,10 @@ function animate() {
   elapsed += dt;
 
   if (disk && disk.material.uniforms) disk.material.uniforms.uTime.value = elapsed;
+  // Scheiben-Flackern: zwei überlagerte Sinusfrequenzen -> lebendiges, warmes Glutlicht,
+  // das dynamisch auf Planeten (Shader-Uniform), Monde, Brocken & Schiff (PointLight) fällt
+  diskPulse = 1 + 0.10 * Math.sin(elapsed * 2.3) + 0.06 * Math.sin(elapsed * 5.7 + 1.4);
+  if (diskLight) diskLight.intensity = 1.5 * diskPulse;
   if (starMat) starMat.uniforms.uTime.value = elapsed;           // Funkeln (Sterne bleiben statisch positioniert)
   // Nebel: statisch (keine Rotation mehr) -> Ruhe; weit draußen, daher keine Nah-Ausblendung nötig
   if (photonRing) { photonRing.quaternion.copy(camera.quaternion); photonRing.scale.setScalar(1 + Math.sin(elapsed * 1.5) * 0.015); }
@@ -3736,6 +3822,7 @@ function onResize() {
   composer.setSize(window.innerWidth, window.innerHeight);
   // composer.setSize() setzt den Bloom-Pass auf volle Dimension zurück -> erneut halbieren
   if (bloomPass) bloomPass.setSize(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2));
+  setFxaaResolution();
   sizeSpeedCanvas();
 }
 
@@ -3771,6 +3858,10 @@ function openOverlay() {
   overlay.classList.add('is-open');
   overlay.setAttribute('aria-hidden', 'false');
   if (loadingEl) loadingEl.classList.remove('is-hidden');
+  // Hintergrund-Seite stilllegen: das Hero-Video dekodiert sonst unsichtbar hinter
+  // dem Overlay weiter (spürbare GPU-/CPU-Last -> Ruckeln in der 3D-Szene)
+  const vid = document.querySelector('.hero-video-background');
+  if (vid) { try { vid.pause(); } catch (_) {} }
 }
 function revealOverlay() {
   requestAnimationFrame(() => overlay.classList.add('is-visible'));
@@ -3780,6 +3871,8 @@ function closeOverlay() {
   overlay.classList.remove('is-open', 'is-visible');
   overlay.classList.add('is-preloaded');
   overlay.setAttribute('aria-hidden', 'true');
+  const vid = document.querySelector('.hero-video-background');
+  if (vid) { try { const p = vid.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
   if (window.gsap) gsap.set('.gateway-content', { clearProps: 'opacity,y,scale,transform' });
   if (window.gsap) gsap.set('.gateway-buttons', { clearProps: 'opacity,scale,transform' });
   if (window.gsap) gsap.set('.g-core', { clearProps: 'all' });
@@ -3806,7 +3899,7 @@ function hideWorlds() {
   for (const pl of planets) {
     pl.group.visible = false;
     pl.group.scale.setScalar(0.0001);
-    if (pl.orbitLine) { pl.orbitLine.visible = false; pl.orbitLine.material.opacity = 0; }
+    if (pl.orbitLine) { pl.orbitLine.visible = false; pl.orbitLine.material.uniforms.uOpacity.value = 0; }
   }
   if (asteroidBelt) asteroidBelt.visible = false;
   if (eclipticField) eclipticField.visible = false;
@@ -3829,8 +3922,9 @@ function revealWorlds() {
     }
     if (pl.orbitLine) {
       pl.orbitLine.visible = true;
-      if (anim) gsap.fromTo(pl.orbitLine.material, { opacity: 0 }, { opacity: 0.55, duration: 1.4, delay: d });
-      else pl.orbitLine.material.opacity = 0.55;
+      const uo = pl.orbitLine.material.uniforms.uOpacity;
+      if (anim) gsap.fromTo(uo, { value: 0 }, { value: ORBIT_OPACITY, duration: 1.4, delay: d });
+      else uo.value = ORBIT_OPACITY;
     }
   });
 }
@@ -3976,14 +4070,99 @@ function updateNova(dt) {
   if (e >= 1) disposeNova();
 }
 
+/* ================================================================
+   INTRO-UI  (Willkommens-Schriftzug · Fly-by-Karten · Boot · Start)
+   ================================================================ */
+// Skippbare Intro-Pause: löst bei Skip/Cancel sofort auf (kein Hängenbleiben)
+function introWait(ms) {
+  return new Promise((r) => {
+    if (introSkipped) { r(); return; }
+    const entry = { r, id: 0 };
+    entry.id = setTimeout(() => {
+      introWaitResolvers = introWaitResolvers.filter(x => x !== entry);
+      r();
+    }, ms);
+    introWaitResolvers.push(entry);
+  });
+}
+function flushIntroWaits() {
+  const pend = introWaitResolvers;
+  introWaitResolvers = [];
+  for (const w of pend) { clearTimeout(w.id); w.r(); }
+}
+function showWelcome() { if (welcomeEl) welcomeEl.classList.add('is-show'); }
+function hideWelcome() { if (welcomeEl) welcomeEl.classList.remove('is-show'); }
+function showFlybyCard(p) {
+  if (!flybyEl) return;
+  flybyEl.innerHTML = `<i class="fas ${p.icon}" aria-hidden="true"></i><div class="u-flyby-text"><strong>${p.name}</strong><span>${p.tagline || p.kind}</span></div>`;
+  flybyEl.style.setProperty('--fb-accent', p.accent || '#a67cff');
+  flybyEl.classList.add('is-show');
+}
+function hideFlybyCard() { if (flybyEl) flybyEl.classList.remove('is-show'); }
+
+// Phase 5: System-Boot-Text (Zeile für Zeile, wie eine Cockpit-Diagnose)
+const BOOT_LINES = [
+  'NEXUS OS v5.1 · Bootsequenz gestartet',
+  'Triebwerke ............ 100%',
+  'Navigationssysteme .... bereit',
+  'Sensorphalanx ......... online',
+  'Gravitationswarnung ... aktiv',
+  'Alle Systeme nominal.',
+];
+async function runBootSequence(fast) {
+  if (!bootEl) return;
+  bootEl.innerHTML = '';
+  bootEl.classList.add('is-show');
+  for (const line of BOOT_LINES) {
+    const div = document.createElement('div');
+    div.className = 'u-boot-line';
+    div.textContent = line;
+    bootEl.appendChild(div);
+    await introWait(fast ? 50 : 320);
+  }
+  await introWait(fast ? 150 : 600);
+}
+
+// Phase 6: pulsierender Start-Hinweis; erste Schub-Eingabe übergibt die Kontrolle.
+// Die Boot-Konsole verschwindet hier — Diagnose abgeschlossen, und so können sich
+// Konsole, Start-Hinweis und Hilfe-Leiste auf keiner Fenstergröße überlappen.
+function showLaunchPrompt() {
+  if (bootEl) bootEl.classList.remove('is-show');
+  if (helpEl && !helpDismissed) helpEl.classList.remove('is-hidden');
+  // Ist der Nutzer schon losgeflogen (Taste während der Boot-Diagnose), wäre die
+  // Aufforderung "[W] zünden" absurd -> Hinweis überspringen
+  if (fly.keys.size > 0 || shipState.vel.lengthSq() > 25) return;
+  launchPending = true;
+  if (launchEl) launchEl.classList.add('is-show');
+}
+function dismissLaunch() {
+  if (!launchPending) return;
+  launchPending = false;
+  if (launchEl) launchEl.classList.remove('is-show');
+  if (bootEl) bootEl.classList.remove('is-show');
+  playSfx('activate');
+}
+function hideIntroUi() {
+  hideWelcome(); hideFlybyCard();
+  if (bootEl) bootEl.classList.remove('is-show');
+  if (launchEl) launchEl.classList.remove('is-show');
+  launchPending = false;
+}
+
 function runIntro() {
   return new Promise((resolve) => {
     let novaFired = false;
+    let worldsShown = false;
+    introSkipped = false;
+    const token = ++introToken;                       // entwertet diese Kette bei cancelIntro
+    const alive = () => token === introToken;
     const fireNova = () => { if (!novaFired) { novaFired = true; supernova(); } };
+    const reveal = () => { if (!worldsShown) { worldsShown = true; revealWorlds(); } };
     const startAng = INTRO_START_ANG;
 
-    // === PHASE F: Kamera senkt sich sanft über die Orbital-Ebene; das Schiff taucht auf ===
+    // === PHASE 4 + 5 + 6: rasanter Schwenk hinters Schiff -> Boot-Diagnose -> Startfreigabe ===
     const descendToShip = async () => {
+      if (!alive()) return;
       realm = 'main';
       placeShipHome();                                           // Schiff an INSIDE_HOME, Blick zum Zentrum
       introActive = false;                                       // Schiff darf jetzt sichtbar werden
@@ -3993,38 +4172,82 @@ function runIntro() {
       _shipFwd.set(0, 0, -1).applyQuaternion(shipState.quat);
       const chasePos = chaseCamPosition(_camDesired.clone());
       const look = shipState.pos.clone().addScaledVector(_shipFwd, 24);
-      await flyCameraTo(chasePos, look, 3.0, 'power2.inOut');    // sanfter Sinkflug zum Schiff
+      // Steht die Kamera noch dicht an einer Welt (Ende des Fly-bys), erst nach
+      // oben/außen lösen — sonst schneidet die direkte Fahrt MITTEN DURCH den
+      // zuletzt besuchten Planeten (Kamera stand auf dessen Außenseite).
+      let nearPl = null;
+      for (const pl of planets) {
+        if (camera.position.distanceTo(pl.worldPos) < pl.data.size * 6) { nearPl = pl; break; }
+      }
+      if (nearPl && !introSkipped) {
+        const away = camera.position.clone().sub(nearPl.worldPos).normalize();
+        const lift = camera.position.clone()
+          .addScaledVector(away, nearPl.data.size * 2.6)
+          .add(new THREE.Vector3(0, nearPl.data.size * 4.2, 0));
+        await flyCameraTo(lift, look, 1.15, 'power2.in');
+        if (!alive()) return;
+      }
+      await flyCameraTo(chasePos, look, introSkipped ? 1.3 : 2.4, 'power3.inOut', true);
+      if (!alive()) return;
       cardsRevealed = true;                                      // Lock-On/Interaktion ab jetzt aktiv
+      await runBootSequence(introSkipped);                       // Phase 5: Systemdiagnose
+      if (!alive()) return;
+      showLaunchPrompt();                                        // Phase 6: [W] Triebwerke zünden
       resolve();
     };
 
-    // === PHASE E: smoother Overview-Shot von oben; die Planeten erscheinen erst jetzt ===
-    const goOverview = async () => {
-      const top = new THREE.Vector3(700, 6200, 2200);            // hoch & leicht versetzt -> 3/4-Top-Vista
-      await flyCameraTo(top, center, 3.2, 'power2.inOut');
-      revealWorlds();                                            // Planeten/Bahnen/Gürtel materialisieren
-      await wait(1500);                                          // kurz wirken lassen
+    // === PHASE 3: geführter Fly-by — Nahzoom auf jede Welt + elegante Textkarte ===
+    const doFlyby = async () => {
+      for (const pl of planets) {
+        if (!alive() || introSkipped) break;
+        const wp = pl.worldPos.clone();
+        const outward = wp.lengthSq() > 1 ? wp.clone().normalize() : new THREE.Vector3(1, 0, 0);
+        const pos = wp.clone()
+          .addScaledVector(outward, pl.data.size * 3.1)
+          .add(new THREE.Vector3(0, pl.data.size * 1.0, 0));
+        await flyCameraTo(pos, wp, 2.1, 'power2.inOut', true);
+        if (!alive() || introSkipped) break;
+        showFlybyCard(pl.data);
+        await introWait(1600);                                   // ~1.5s pro Welt verweilen
+        hideFlybyCard();
+        await introWait(180);                                    // kleine Atempause vor dem Weitergleiten
+      }
+      hideFlybyCard();
       descendToShip();
     };
 
-    // Reduced-Motion / kein GSAP: sofort einrichten
+    // === PHASE 2: Willkommens-Schriftzug über dem frisch geborenen System ===
+    const doWelcome = async () => {
+      if (!alive()) return;
+      if (introSkipped) { descendToShip(); return; }
+      showWelcome();
+      await introWait(3400);
+      hideWelcome();
+      await introWait(350);                                      // Text sauber ausblenden lassen
+      if (!alive()) return;
+      doFlyby();
+    };
+
+    // Reduced-Motion / kein GSAP: sofort einrichten (Boot-Text + Startfreigabe direkt)
     if (reduceMotion || !window.gsap) {
-      fireNova(); revealWorlds();
+      fireNova(); reveal();
       realm = 'main'; placeShipHome();
       _shipFwd.set(0, 0, -1).applyQuaternion(shipState.quat);
       chaseCamPosition(_camDesired); camera.position.copy(_camDesired);
       camera.lookAt(shipState.pos.clone().addScaledVector(_shipFwd, 24));
       cardsRevealed = true;
-      introActive = false; resolve(); return;
+      introActive = false;
+      runBootSequence(true).then(() => { if (alive()) showLaunchPrompt(); resolve(); });
+      return;
     }
 
     introActive = true;
     cards.forEach(c => { c.mesh.visible = false; }); // Karten leben im Tunnel; im Haupt-Realm verborgen
-    hideWorlds();                                     // Planeten erst in Phase E (idempotent)
-    if (shipPivot) shipPivot.scale.setScalar(0.0001); // Schiff bis Phase F unsichtbar klein halten
+    hideWorlds();                                     // Planeten formen sich erst aus der Supernova
+    if (shipPivot) shipPivot.scale.setScalar(0.0001); // Schiff bis Phase 4 unsichtbar klein halten
 
-    // === PHASE D: am SL — alles dreht sich schnell, dann riesige Explosion; Kamera fährt nach außen ===
-    // D1: enges, immer schnelleres Kreisen ums Schwarze Loch
+    // === PHASE 1: am SL — alles dreht sich schnell, dann Supernova; die Welten
+    //     materialisieren sich WÄHREND der Explosion aus den Trümmern ===
     const spin = { t: 0 };
     introTween = gsap.to(spin, {
       t: 1, duration: 2.2, ease: 'power2.in',                    // beschleunigt in den Ausbruch
@@ -4038,9 +4261,10 @@ function runIntro() {
         introTween = null;
         fireNova();                                              // EXPLOSION – riesig, von nah
         finalFlash();
-        // D2: während der Explosion fährt die Kamera nach AUSSEN (von außen betrachten)
+        // Kamera fährt nach AUSSEN; die Planeten wachsen zeitversetzt aus der Druckwelle
         const baseAng = startAng + Math.PI * 4.5;
         const out = { t: 0 };
+        reveal();
         introTween = gsap.to(out, {
           t: 1, duration: 3.2, ease: 'power2.out',               // schnell raus, dann sanft auslaufend
           onUpdate: () => {
@@ -4055,17 +4279,26 @@ function runIntro() {
             );
             camera.lookAt(center);
           },
-          onComplete: () => { introTween = null; goOverview(); }, // -> Overview -> Schiff
+          onComplete: () => { introTween = null; doWelcome(); }, // -> Willkommen -> Fly-by -> Schiff
         });
       },
     });
 
-    // Skip (Taste): direkt Supernova -> Overview -> Schiff
+    // Skip (Taste/Klick): restliche Phasen im Schnelldurchlauf direkt zum Schiff
     introFinish = () => {
-      if (introTween) { introTween.kill(); introTween = null; }
       introFinish = null;
-      fireNova(); finalFlash();
-      goOverview();
+      introSkipped = true;
+      // Lief noch die Phase-1-Timeline (Spin/Outward), wurde die Welcome/Fly-by-Kette
+      // nie gestartet -> nach dem Kill selbst zum Schiff springen. Andernfalls hängt
+      // die Kette in einer Kamerafahrt oder Pause -> fast-forwarden, sie läuft weiter
+      // und bricht dank introSkipped selbst zum Schiff durch.
+      const inPhase1 = !!introTween;
+      if (introTween) { introTween.kill(); introTween = null; }
+      fireNova(); finalFlash(); reveal();
+      hideWelcome(); hideFlybyCard();
+      if (inPhase1) { descendToShip(); return; }
+      if (lastCamTween && lastCamTween.isActive()) lastCamTween.progress(1);
+      flushIntroWaits();
     };
   });
 }
@@ -4129,7 +4362,7 @@ async function enterUniverse() {
   }
   openOverlay();
   helpDismissed = false;
-  if (helpEl) helpEl.classList.remove('is-hidden');
+  if (helpEl) helpEl.classList.add('is-hidden');   // Hilfe erst mit der Startfreigabe (Phase 6) zeigen
   const ready = initSceneOnce();
   onResize();
   viewMode = 'inside'; realm = 'main';
@@ -4177,6 +4410,10 @@ function cancelIntro() {
   if (introTween) { introTween.kill(); introTween = null; }
   introFinish = null;
   introActive = false;
+  introToken++;                 // verwaiste Intro-Ketten (await-Fortsetzungen) entwerten
+  introSkipped = true;
+  flushIntroWaits();
+  hideIntroUi();
 }
 
 async function smoothExit(scrollTarget) {
